@@ -1,6 +1,6 @@
 # SE Practice Planning
 
-App per i compagni di corso di Somatic Experiencing: mostra le disponibilità raccolte con un Google Form
+App per i compagni di corso SE: mostra le disponibilità raccolte con un Google Form
 e permette di proporre, confermare e annullare sessioni di pratica, con avvisi via email e WhatsApp.
 Interfaccia in italiano e inglese.
 
