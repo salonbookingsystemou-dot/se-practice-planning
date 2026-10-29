@@ -1,4 +1,4 @@
-/**
+/** SE Practice Partners · Google Apps Script web app (published automatically from GitHub)
  * SE Practice Partners · Google Apps Script web app
  * Bound to the spreadsheet that collects the form responses.
  * Reads availability from the responses sheet, stores bookings in a "Bookings" sheet.
