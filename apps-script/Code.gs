@@ -6,7 +6,7 @@
 
 const CONFIG = {
   FORM_URL: 'https://forms.gle/TUO_LINK',   // link to the Google Form (Send → link)
-  APP_URL: '',                                // short link to the app (e.g. https://pratica.mnesti.it); empty = Apps Script URL
+  APP_URL: 'https://se-practice.mnesti.it',                                // short link to the app (e.g. https://pratica.mnesti.it); empty = Apps Script URL
   RESPONSES_SHEET: '',      // leave empty to auto-detect the sheet with the form responses
   BOOKINGS_SHEET: 'Bookings',
   TIMEZONE: 'Europe/Rome',
