@@ -425,7 +425,8 @@ const STR = {
     confirmedToast: 'Sessione confermata.', cancelledToast: 'Sessione annullata.', cancelAsk: 'Annullare questa sessione?',
     freeNow: 'Ora sono libero/a', freeUntil: (t) => `Libero/a ora · fino alle ${t}`, freeShort: (t) => `fino alle ${t}`,
     freeFor: { 30: '30 minuti', 60: '1 ora', 120: '2 ore', 180: '3 ore' }, freeChip: (n) => `Liberi ora${n ? ' · ' + n : ''}`,
-    proposeNow: 'Proponi adesso', freeOnToast: (t) => `Gli altri ti vedono libero/a fino alle ${t}.`, freeOffToast: 'Non risulti più libero/a.',
+    proposeNow: 'Proponi adesso', signInToPropose: 'Accedi per proporre',
+    nowNeedsLogin: 'Chi è libero adesso lo vedono solo i compagni che hanno fatto l\'accesso.', freeOnToast: (t) => `Gli altri ti vedono libero/a fino alle ${t}.`, freeOffToast: 'Non risulti più libero/a.',
     noFreeNow: 'In questo momento nessuno si è segnato come libero.',
     loginEyebrow: 'Accesso', loginTitle: 'Entra nell\'app', signIn: 'Accedi', signOut: 'Esci', hello: (n) => `Ciao, ${n}`,
     loginText: 'Accedi con l\'account Google che hai usato nel modulo: l\'app ti riconoscerà da sola anche le prossime volte.',
@@ -513,7 +514,8 @@ const STR = {
     confirmedToast: 'Session confirmed.', cancelledToast: 'Session cancelled.', cancelAsk: 'Cancel this session?',
     freeNow: "I'm free now", freeUntil: (t) => `Free now · until ${t}`, freeShort: (t) => `until ${t}`,
     freeFor: { 30: '30 minutes', 60: '1 hour', 120: '2 hours', 180: '3 hours' }, freeChip: (n) => `Free now${n ? ' · ' + n : ''}`,
-    proposeNow: 'Propose now', freeOnToast: (t) => `Others see you as free until ${t}.`, freeOffToast: 'You no longer show as free.',
+    proposeNow: 'Propose now', signInToPropose: 'Sign in to propose',
+    nowNeedsLogin: 'Only signed-in classmates can see who is free right now.', freeOnToast: (t) => `Others see you as free until ${t}.`, freeOffToast: 'You no longer show as free.',
     noFreeNow: 'Nobody has marked themselves as free right now.',
     loginEyebrow: 'Sign in', loginTitle: 'Enter the app', signIn: 'Sign in', signOut: 'Sign out', hello: (n) => `Hi, ${n}`,
     loginText: 'Sign in with the Google account you used in the form: the app will recognise you by itself next time.',
@@ -611,7 +613,7 @@ const USE_SAMPLE = location.protocol === 'file:' || /[?&]demo\b/.test(location.s
 
 async function call(fn, ...args) {
   if (USE_SAMPLE) return demo(fn, ...args);
-  const res = fn === 'getData'
+  const res = fn === 'getData' && !args[0]
     ? await fetch(API_URL + '?fn=getData', { cache: 'no-store' })
     : await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                              body: JSON.stringify({ fn, args }) });
@@ -807,7 +809,8 @@ function renderPeople() {
       ${p.notes ? `<p class="notes">${esc(p.notes)}</p>` : ''}
       <div class="card-foot">
         ${wa ? `<a class="contact" href="${wa}" target="_blank" rel="noopener">WhatsApp →</a>` : '<span></span>'}
-        ${isMe ? '' : fu ? `<button class="btn btn-small" data-book="${esc(p.name)}" data-now="1">${esc(t.proposeNow)}</button>`
+        ${isMe ? '' : !myKey() ? `<button class="btn btn-ghost btn-small" data-login="1">${esc(t.signInToPropose)}</button>`
+               : fu ? `<button class="btn btn-small" data-book="${esc(p.name)}" data-now="1">${esc(t.proposeNow)}</button>`
                          : `<button class="btn btn-small" data-book="${esc(p.name)}">${esc(t.proposeSession)}</button>`}
       </div>
     </article>`;
@@ -948,8 +951,12 @@ $('book').onsubmit = async (e) => {
 function setSession(sess, greet) {
   state.session = sess; state.me = sess ? sess.name : '';
   try { sess ? localStorage.setItem('se-session', JSON.stringify(sess)) : localStorage.removeItem('se-session'); localStorage.removeItem('se-key'); } catch (e) {}
+  if (!sess) state.people.forEach(p => { delete p.freeUntil; });   // signed out: no more "free now" info
   render();
-  if (sess) { if (greet) toast(T().welcome(first(sess.name))); maybeAskPhoto(); }
+  if (sess) {
+    if (greet) toast(T().welcome(first(sess.name)));
+    call('getData', sess.key).then(d => { apply(d); maybeAskPhoto(); }).catch(() => maybeAskPhoto());
+  }
 }
 function signOut() {
   setSession(null);
@@ -1001,10 +1008,13 @@ document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => setLang(
 /* ---------- Free right now ---------- */
 function updateNowChip() {
   const n = state.people.filter(p => freeUntil(p)).length;
-  $('f-now-label').textContent = T().freeChip(n);
+  $('f-now-label').textContent = myKey() ? T().freeChip(n) : T().freeChip(0);
   $('f-now').setAttribute('aria-pressed', String(!!state.nowOnly));
 }
-$('f-now').onclick = () => { state.nowOnly = !state.nowOnly; renderPeople(); };
+$('f-now').onclick = () => {
+  if (!myKey()) return openLogin(T().nowNeedsLogin);
+  state.nowOnly = !state.nowOnly; renderPeople();
+};
 
 function applyNow(now) {
   state.people.forEach(p => { if (now[p.name]) p.freeUntil = now[p.name]; else delete p.freeUntil; });
@@ -1035,12 +1045,12 @@ try { state.freeMins = Number(localStorage.getItem('se-free-mins')) || 60; } cat
 /* Every minute, while the page is visible: refresh who is free (a very small request) and drop expired switches */
 setInterval(async () => {
   if (document.visibilityState !== 'visible' || !state.people.length) return;
-  try { applyNow((await call('getNow')).now); } catch (e) { /* keep what we have */ }
+  try { applyNow((await call('getNow', myKey())).now); } catch (e) { /* keep what we have */ }
   if (!document.activeElement || !document.activeElement.matches('[data-free-mins]')) renderPeople();
 }, 60000);
 document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState === 'visible' && state.people.length) {
-    try { applyNow((await call('getNow')).now); renderPeople(); } catch (e) {}
+    try { applyNow((await call('getNow', myKey())).now); renderPeople(); } catch (e) {}
   }
 });
 
@@ -1100,6 +1110,7 @@ $('link-form').onsubmit = async (e) => {
 $('login-skip').onclick = () => { try { sessionStorage.setItem('se-login-skip', '1'); } catch (e) {} $('login-dlg').close(); };
 document.addEventListener('click', (e) => {
   if (e.target.closest('#sign-in')) openLogin();
+  if (e.target.closest('[data-login]')) openLogin(T().needLogin);
   if (e.target.closest('#sign-out')) signOut();
 });
 window.addEventListener('load', initGoogle);
@@ -1211,7 +1222,7 @@ applyTexts();
 renderLoading();
 const slowTimer = setTimeout(() => { const el = $('loading-text'); if (el) el.textContent = T().loadingSlow; }, 4000);
 recognise();
-call('getData').then(data => { apply(data); state.me ? maybeAskPhoto() : maybeAskLogin(); }).catch(err => {
+call('getData', myKey()).then(data => { apply(data); state.me ? maybeAskPhoto() : maybeAskLogin(); }).catch(err => {
   $('people').innerHTML = `<div class="error">${esc(T().loadError)} ${esc(errMsg(err))}</div>`;
   $('sessions').innerHTML = '';
 }).finally(() => { clearTimeout(slowTimer); $('people').removeAttribute('aria-busy'); });
@@ -1232,7 +1243,8 @@ function demo(fn, ...args) {
   }
   const db = demo.db;
   const actor = (k) => { const p = db.people.find(x => x.key === k); if (!p) throw new Error('ERR_NOT_YOU'); return p.name; };
-  if (fn === 'getNow') return { now: Object.fromEntries(db.people.filter(p => p.freeUntil).map(p => [p.name, p.freeUntil])) };
+  if (fn === 'getNow') return { now: args[0] ? Object.fromEntries(db.people.filter(p => p.freeUntil).map(p => [p.name, p.freeUntil])) : {} };
+  if (fn === 'getData' && !args[0]) { const c = JSON.parse(JSON.stringify(db)); c.people.forEach(p => delete p.freeUntil); return c; }
   if (fn === 'setFreeNow') {
     const p = db.people.find(x => x.name === actor(args[0]));
     p.freeUntil = args[1] ? new Date(Date.now() + args[1] * 60000).toISOString() : '';

@@ -61,6 +61,8 @@ Non c'è più il menu «Io sono»: chi non ha fatto l'accesso può solo guardare
   La risposta è la stessa anche per email sconosciute; al massimo un link ogni 10 minuti per persona.
 - Ogni azione (proporre, confermare, annullare, «Ora sono libero», foto) richiede il codice personale:
   il nome lo ricava il motore, quindi nessuno può agire a nome di altri. «Esci» in alto toglie l'accesso dal dispositivo.
+- Chi non ha fatto l'accesso vede persone e disponibilità abituali, ma **non** chi è libero adesso e non può proporre:
+  il motore non invia proprio quell'informazione senza un codice personale valido.
 - Le foto caricate dall'app (320 px) stanno nel foglio «Photos» e hanno la precedenza su quelle del modulo.
 
 ## «Ora sono libero»

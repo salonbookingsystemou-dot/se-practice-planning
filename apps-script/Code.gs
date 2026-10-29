@@ -54,7 +54,8 @@ function json_(obj) {
 
 /* ---------- Data for the page ---------- */
 
-function getData() {
+/* k = personal key of whoever is looking. "Free right now" is shared only with signed-in students. */
+function getData(k) {
   // Email addresses never leave the server: the page only learns whether someone can be notified.
   const people = readPeople_().map(function (p) {
     const out = Object.assign({}, p);
@@ -62,7 +63,7 @@ function getData() {
     delete out.email;
     return out;
   });
-  const now = readNow_();
+  const now = k && personByKey_(k) ? readNow_() : {};
   people.forEach(function (p) { if (now[p.name]) p.freeUntil = now[p.name]; });
   return { people: people, bookings: readBookings_(), today: today_(), formUrl: CONFIG.FORM_URL, appUrl: appUrl_() };
 }
@@ -239,11 +240,11 @@ function uploadPhoto(k, dataUrl) {
     for (var i = 1; i < values.length; i++) {
       if (String(values[i][0]) === pk) {
         sheet.getRange(i + 1, 2, 1, 3).setValues([[p.name, dataUrl, new Date()]]);
-        return getData();
+        return getData(k);
       }
     }
     sheet.appendRow([pk, p.name, dataUrl, new Date()]);
-    return getData();
+    return getData(k);
   } finally {
     lock.releaseLock();
   }
@@ -274,7 +275,10 @@ function photosSheet_() {
 const FREE_MINUTES = [30, 60, 120, 180];
 
 /* Polled by the page every minute: only names and end times, nothing else */
-function getNow() { return { now: readNow_(), serverTime: new Date().toISOString() }; }
+function getNow(k) {
+  const ok = !!(k && personByKey_(k));
+  return { now: ok ? readNow_() : {}, signedIn: ok, serverTime: new Date().toISOString() };
+}
 
 function setFreeNow(k, minutes) {
   const p = actor_(k);
@@ -290,7 +294,7 @@ function setFreeNow(k, minutes) {
     for (var i = 1; i < values.length; i++) { if (key_(values[i][0]) === key_(p.name)) { row = i + 1; break; } }
     if (row > 0) sheet.getRange(row, 2).setValue(until);
     else if (until) sheet.appendRow([p.name, until]);
-    return getNow();
+    return getNow(k);
   } finally {
     lock.releaseLock();
   }
@@ -353,7 +357,7 @@ function createBooking(input) {
 
     bookingsSheet_().appendRow([booking.id, new Date(), booking.by, booking.with, booking.date, booking.time,
       booking.format, booking.note, 'proposed', booking.third, '']);
-    const data = getData();
+    const data = getData(input.key);
     data.emailed = notify_('proposed', booking, people, input.lang, by);
     return data;
   } finally {
@@ -379,7 +383,7 @@ function confirmBooking(id, k, lang) {
       if (ev.eventId) { sheet.getRange(row, 12, 1, 2).setValues([[ev.meet || '', ev.eventId]]); b.meet = ev.meet || ''; b.eventId = ev.eventId; }
     }
     return { event: 'scheduled', actor: who, everyone: true };
-  }, lang);
+  }, lang, k);
 }
 
 function cancelBooking(id, k, lang) {
@@ -390,10 +394,10 @@ function cancelBooking(id, k, lang) {
     sheet.getRange(row, 9).setValue('cancelled');
     if (b.eventId) removeEvent_(b.eventId);
     return { event: 'cancelled', actor: who };
-  }, lang);
+  }, lang, k);
 }
 
-function withBooking_(id, change, lang) {
+function withBooking_(id, change, lang, k) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -407,7 +411,7 @@ function withBooking_(id, change, lang) {
         confirmedBy: String(r[10] || '').split(',').map(function (x) { return x.trim(); }).filter(String),
         meet: String(r[11] || ''), eventId: String(r[12] || '') };
       const out = change(b, i + 1, sheet);
-      const data = getData();
+      const data = getData(k);
       data.emailed = notify_(out.event, b, readPeople_(), lang, out.actor, out.everyone);
       data.scheduled = out.event === 'scheduled';
       data.meet = !!b.meet;
