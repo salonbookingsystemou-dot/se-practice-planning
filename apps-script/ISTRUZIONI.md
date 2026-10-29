@@ -31,6 +31,20 @@ Alla prima prenotazione lo script crea da solo la scheda **Bookings** nel foglio
 Le foto restano private nel tuo Drive: l'app ne mostra solo una miniatura. Chi non carica una foto vede le iniziali.
 Il caricamento file nel modulo richiede che chi risponde abbia un account Google.
 
+## Notifiche email
+L'app avvisa via email:
+- l'invitato, quando riceve una proposta;
+- chi ha proposto, quando l'invitato conferma;
+- l'altra persona, quando una sessione viene annullata.
+
+Usa la colonna email del foglio (con «Raccogli indirizzi email» attivo nel modulo, oppure una domanda con «email» nel titolo).
+Le email partono dal tuo account con il nome «SE Practice Partners»; rispondendo, si scrive direttamente all'altro studente.
+Gli indirizzi non vengono mai mostrati nell'app.
+
+**Attivazione:** in Apps Script scegli la funzione `testEmail` → **Esegui** → autorizza l'invio di email
+(ti arriva un'email di prova). Poi pubblica una **nuova versione** del deployment.
+Per spegnere le notifiche: `SEND_EMAILS: false` in `Code.gs`. Limite di Gmail: circa 100 email al giorno.
+
 ## Da sapere
 - Non c'è un accesso con password: chiunque abbia il link può prenotare a nome di altri. Tra 45 compagni di corso basta, ma non diffondere il link fuori dal gruppo.
 - Il numero di telefono compare solo se la persona l'ha inserito nel modulo (link diretto a WhatsApp).

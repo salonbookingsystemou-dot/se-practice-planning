@@ -11,6 +11,8 @@ const CONFIG = {
   BOOKINGS_SHEET: 'Bookings',
   TIMEZONE: 'Europe/Rome',
   MIN_GAP_MINUTES: 90,        // a person can't have two sessions closer than this
+  SEND_EMAILS: true,          // email notifications for proposals, confirmations and cancellations
+  SENDER_NAME: 'SE Practice Partners',
 };
 
 const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status'];
@@ -25,9 +27,17 @@ function doGet() {
 /* ---------- Data for the page ---------- */
 
 function getData() {
-  return { people: readPeople_(), bookings: readBookings_(), today: today_(), formUrl: CONFIG.FORM_URL,
-           appUrl: CONFIG.APP_URL || ScriptApp.getService().getUrl() };
+  // Email addresses never leave the server: the page only learns whether someone can be notified.
+  const people = readPeople_().map(function (p) {
+    const out = Object.assign({}, p);
+    out.hasEmail = !!p.email;
+    delete out.email;
+    return out;
+  });
+  return { people: people, bookings: readBookings_(), today: today_(), formUrl: CONFIG.FORM_URL, appUrl: appUrl_() };
 }
+
+function appUrl_() { return CONFIG.APP_URL || ScriptApp.getService().getUrl(); }
 
 function readPeople_() {
   const sheet = responsesSheet_();
@@ -51,6 +61,7 @@ function readPeople_() {
       phone: cell_(row, col.phone),
       notes: cell_(row, col.notes),
       photo: photo_(cell_(row, col.photo)),
+      email: /@/.test(cell_(row, col.email)) ? cell_(row, col.email) : '',
     };
   });
 
@@ -125,35 +136,32 @@ function createBooking(input) {
       throw new Error(['ERR_CLASH', clash.by, clash.with, clash.time].join('|'));
     }
 
-    bookingsSheet_().appendRow([
-      Utilities.getUuid().slice(0, 8),
-      new Date(),
-      by,
-      withName,
-      input.date,
-      input.time,
-      String(input.format || '').slice(0, 40),
-      String(input.note || '').slice(0, 300),
-      'proposed',
-    ]);
-    return getData();
+    const booking = {
+      id: Utilities.getUuid().slice(0, 8), by: by, with: withName, date: input.date, time: input.time,
+      format: String(input.format || '').slice(0, 40), note: String(input.note || '').slice(0, 300),
+    };
+    bookingsSheet_().appendRow([booking.id, new Date(), booking.by, booking.with, booking.date, booking.time,
+      booking.format, booking.note, 'proposed']);
+    const data = getData();
+    data.emailed = notify_('proposed', booking, people, input.lang);
+    return data;
   } finally {
     lock.releaseLock();
   }
 }
 
-function confirmBooking(id, name) {
+function confirmBooking(id, name, lang) {
   return updateStatus_(id, name, 'confirmed', function (b) { return key_(b.with) === key_(name); },
-    'ERR_ONLY_INVITED');
+    'ERR_ONLY_INVITED', lang);
 }
 
-function cancelBooking(id, name) {
+function cancelBooking(id, name, lang) {
   return updateStatus_(id, name, 'cancelled', function (b) {
     return key_(b.with) === key_(name) || key_(b.by) === key_(name);
-  }, 'ERR_ONLY_PAIR');
+  }, 'ERR_ONLY_PAIR', lang);
 }
 
-function updateStatus_(id, name, status, allowed, refusal) {
+function updateStatus_(id, name, status, allowed, refusal, lang) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -163,12 +171,129 @@ function updateStatus_(id, name, status, allowed, refusal) {
       if (String(values[i][0]) !== String(id)) continue;
       if (!allowed({ by: values[i][2], with: values[i][3] })) throw new Error(refusal);
       sheet.getRange(i + 1, 9).setValue(status);
-      return getData();
+      const r = values[i];
+      const booking = { id: String(r[0]), by: String(r[2]), with: String(r[3]), date: asDate_(r[4]),
+                        time: asTime_(r[5]), format: String(r[6]), note: String(r[7]), actor: name };
+      const data = getData();
+      data.emailed = notify_(status, booking, readPeople_(), lang);
+      return data;
     }
     throw new Error('ERR_NOT_FOUND');
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ---------- Email notifications ---------- */
+
+const MAIL = {
+  it: {
+    proposed: { to: 'with', subject: function (b) { return b.byFirst + ' ti propone una sessione di pratica SE'; },
+      lead: function (b) { return b.by + ' ti ha proposto una sessione di pratica:'; },
+      action: 'Apri l\'app per confermarla o annullarla.', button: 'Conferma la sessione' },
+    confirmed: { to: 'by', subject: function (b) { return b.withFirst + ' ha confermato la sessione di pratica'; },
+      lead: function (b) { return b.with + ' ha confermato la sessione che gli/le hai proposto:'; },
+      action: 'Buona pratica!', button: 'Apri l\'app' },
+    cancelled: { to: 'other', subject: function (b) { return 'Sessione di pratica annullata · ' + b.whenShort; },
+      lead: function (b) { return b.actorName + ' ha annullato questa sessione di pratica:'; },
+      action: 'Se volete, potete proporne un\'altra dall\'app.', button: 'Apri l\'app' },
+    labels: { when: 'Quando', format: 'Formato', note: 'Nota', at: 'alle' },
+    formats: { 'Online': 'Online', 'In person': 'In presenza' },
+    footer: 'Ricevi questa email perché hai inserito le tue disponibilità per la pratica SE tra compagni di corso.',
+    locale: 'it',
+  },
+  en: {
+    proposed: { to: 'with', subject: function (b) { return b.byFirst + ' proposed an SE practice session'; },
+      lead: function (b) { return b.by + ' proposed a practice session with you:'; },
+      action: 'Open the app to confirm or cancel it.', button: 'Confirm the session' },
+    confirmed: { to: 'by', subject: function (b) { return b.withFirst + ' confirmed your practice session'; },
+      lead: function (b) { return b.with + ' confirmed the session you proposed:'; },
+      action: 'Enjoy the practice!', button: 'Open the app' },
+    cancelled: { to: 'other', subject: function (b) { return 'Practice session cancelled · ' + b.whenShort; },
+      lead: function (b) { return b.actorName + ' cancelled this practice session:'; },
+      action: 'You can propose another one from the app.', button: 'Open the app' },
+    labels: { when: 'When', format: 'Format', note: 'Note', at: 'at' },
+    formats: { 'Online': 'Online', 'In person': 'In person' },
+    footer: 'You receive this email because you shared your availability for SE peer practice.',
+    locale: 'en',
+  },
+};
+
+/* Sends one email for the event; returns the recipient's name if sent, '' otherwise. Never blocks the booking. */
+function notify_(event, b, people, lang) {
+  if (!CONFIG.SEND_EMAILS) return '';
+  try {
+    const t = MAIL[lang] || MAIL.it;
+    const tpl = t[event];
+    const find = function (n) { return people.find(function (p) { return key_(p.name) === key_(n); }) || {}; };
+    const byP = find(b.by), withP = find(b.with);
+    var to, from;
+    if (tpl.to === 'with') { to = withP; from = byP; }
+    else if (tpl.to === 'by') { to = byP; from = withP; }
+    else {   // cancellation: tell the person who did NOT cancel
+      const actorIsBy = key_(b.actor) === key_(b.by);
+      to = actorIsBy ? withP : byP; from = actorIsBy ? byP : withP;
+    }
+    if (!to.email || MailApp.getRemainingDailyQuota() < 1) return '';
+
+    const first = function (n) { return String(n).split(/\s+/)[0]; };
+    const d = dateLabel_(b.date, t.locale);
+    const v = Object.assign({}, b, {
+      byFirst: first(b.by), withFirst: first(b.with), actorName: from.name || b.actor,
+      whenShort: d.short + ' ' + b.time,
+    });
+    const when = d.long + ' ' + t.labels.at + ' ' + b.time;
+    const format = t.formats[b.format] || b.format;
+    const url = appUrl_();
+
+    const rows = [[t.labels.when, when], [t.labels.format, format]];
+    if (b.note) rows.push([t.labels.note, b.note]);
+
+    const text = [tpl.lead(v), ''].concat(rows.map(function (r) { return r[0] + ': ' + r[1]; }),
+      ['', tpl.action, url, '', '—', t.footer]).join('\n');
+
+    const html =
+      '<div style="background:#F5F1E7;padding:28px 16px;font-family:Helvetica,Arial,sans-serif;color:#262419">' +
+      '<div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #E2DBC9;border-radius:16px;padding:28px">' +
+      '<p style="margin:0 0 6px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:bold;color:#4B6B57">SE Practice Partners</p>' +
+      '<p style="margin:0 0 18px;font-family:Georgia,serif;font-size:21px;line-height:1.3">' + esc_(tpl.lead(v)) + '</p>' +
+      '<table style="border-collapse:collapse;width:100%;font-size:15px;margin-bottom:20px">' +
+      rows.map(function (r) {
+        return '<tr><td style="padding:8px 0;border-top:1px solid #ECE6D7;color:#6B6553;width:90px;vertical-align:top">' + esc_(r[0]) +
+          '</td><td style="padding:8px 0;border-top:1px solid #ECE6D7">' + esc_(r[1]) + '</td></tr>';
+      }).join('') + '</table>' +
+      '<p style="margin:0 0 18px;font-size:15px">' + esc_(tpl.action) + '</p>' +
+      '<a href="' + esc_(url) + '" style="display:inline-block;background:#3F5443;color:#fff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:12px">' + esc_(tpl.button) + '</a>' +
+      '</div><p style="max-width:520px;margin:16px auto 0;font-size:12px;color:#6B6553;text-align:center">' + esc_(t.footer) + '</p></div>';
+
+    const opts = { name: CONFIG.SENDER_NAME, htmlBody: html };
+    if (from.email) opts.replyTo = from.email;   // replies go to the other student, not to the app owner
+    MailApp.sendEmail(to.email, tpl.subject(v), text, opts);
+    return to.name;
+  } catch (e) {
+    console.error('Email not sent: ' + e);
+    return '';
+  }
+}
+
+function dateLabel_(iso, locale) {
+  const p = iso.split('-').map(Number);
+  const d = new Date(p[0], p[1] - 1, p[2], 12);
+  const it = locale === 'it';
+  const days = it ? ['domenica','lunedì','martedì','mercoledì','giovedì','venerdì','sabato']
+                  : ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months = it ? ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre']
+                    : ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return { long: days[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()], short: d.getDate() + '/' + (d.getMonth() + 1) };
+}
+
+function esc_(s) {
+  return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
+}
+
+/* Run once from the editor to authorize email sending and check the setup. */
+function testEmail() {
+  MailApp.sendEmail(Session.getActiveUser().getEmail(), 'SE Practice Partners · test', 'Email notifications are working.');
 }
 
 /* ---------- Sheets ---------- */
@@ -212,6 +337,7 @@ function mapColumns_(header) {
     phone: find(function (x) { return x.indexOf('phone') !== -1; }),
     notes: find(function (x) { return /^notes\b/.test(x); }),
     photo: find(function (x) { return x.indexOf('photo') !== -1; }),
+    email: find(function (x) { return x.indexOf('email') !== -1 || x.indexOf('e-mail') !== -1; }),
   };
 }
 

@@ -255,6 +255,9 @@ const STR = {
     usuallyFree: (n, d, s) => `${n} di solito è libero/a: ${d || '—'} · ${s || '—'}`,
     doneEyebrow: 'Sessione proposta', doneTitle: (n) => `Ora avvisa ${n}`,
     doneWa: 'La sessione è nella lista. Manda questo messaggio, così può confermarla.',
+    doneEmailed: (n) => `Abbiamo mandato un'email a ${n}. Se vuoi, avvisalo/a anche su WhatsApp.`,
+    emailedConfirm: (n) => `Sessione confermata. Abbiamo avvisato ${n} via email.`,
+    emailedCancel: (n) => `Sessione annullata. Abbiamo avvisato ${n} via email.`,
     doneNoPhone: (n) => `${n} non ha inserito il numero. Copia il messaggio e mandaglielo nel gruppo o in privato.`,
     message: 'Messaggio', close: 'Chiudi', copy: 'Copia messaggio', tellWa: 'Avvisa su WhatsApp',
     copied: 'Messaggio copiato.', chooseFirst: 'Prima scegli il tuo nome in alto.',
@@ -307,6 +310,9 @@ const STR = {
     usuallyFree: (n, d, s) => `${n} is usually free: ${d || '—'} · ${s || '—'}`,
     doneEyebrow: 'Session proposed', doneTitle: (n) => `Now let ${n} know`,
     doneWa: 'The session is in the list. Send this message so they can confirm it.',
+    doneEmailed: (n) => `We emailed ${n}. You can also let them know on WhatsApp.`,
+    emailedConfirm: (n) => `Session confirmed. We emailed ${n}.`,
+    emailedCancel: (n) => `Session cancelled. We emailed ${n}.`,
     doneNoPhone: (n) => `${n} hasn't shared a phone number. Copy the message and send it to them in the group or in private.`,
     message: 'Message', close: 'Close', copy: 'Copy message', tellWa: 'Tell them on WhatsApp',
     copied: 'Message copied.', chooseFirst: 'Choose your name at the top first.',
@@ -570,11 +576,11 @@ function updateHint() {
   $('b-format').value = !isOnline(b) ? 'In person' : 'Online';
 }
 
-function showDone(b) {
+function showDone(b, emailed) {
   const t = T();
   const wa = waInvite(b);
   $('d-title').textContent = t.doneTitle(first(b.with));
-  $('d-text').textContent = wa ? t.doneWa : t.doneNoPhone(b.with);
+  $('d-text').textContent = emailed ? t.doneEmailed(first(emailed)) : wa ? t.doneWa : t.doneNoPhone(b.with);
   $('d-msg').value = inviteText(b);
   $('d-wa').hidden = !wa; if (wa) $('d-wa').href = wa;
   $('book').hidden = true; $('done').hidden = false;
@@ -595,13 +601,14 @@ $('b-cancel').onclick = () => $('dlg').close();
 $('book').onsubmit = async (e) => {
   e.preventDefault();
   const input = { by: $('b-by').value, with: $('b-with').value, date: $('b-date').value, time: $('b-time').value,
-                  format: $('b-format').value, note: $('b-note').value.trim() };
+                  format: $('b-format').value, note: $('b-note').value.trim(), lang: state.lang };
   if (!input.by) { $('b-error').textContent = T().pickName; return; }
   $('b-submit').disabled = true; $('b-error').textContent = '';
   try {
-    apply(await call('createBooking', input));
+    const data = await call('createBooking', input);
+    apply(data);
     if (!state.me) setMe(input.by);
-    showDone(input);
+    showDone(input, data.emailed);
   } catch (err) {
     $('b-error').textContent = errMsg(err);
   } finally { $('b-submit').disabled = false; }
@@ -635,8 +642,14 @@ document.addEventListener('click', async (e) => {
   if (!state.me) return toast(t.chooseFirst);
   el.disabled = true;
   try {
-    if (el.dataset.confirm) { apply(await call('confirmBooking', el.dataset.confirm, state.me)); toast(t.confirmedToast); }
-    if (el.dataset.cancel && confirm(t.cancelAsk)) { apply(await call('cancelBooking', el.dataset.cancel, state.me)); toast(t.cancelledToast); }
+    if (el.dataset.confirm) {
+      const d = await call('confirmBooking', el.dataset.confirm, state.me, state.lang); apply(d);
+      toast(d.emailed ? t.emailedConfirm(first(d.emailed)) : t.confirmedToast);
+    }
+    if (el.dataset.cancel && confirm(t.cancelAsk)) {
+      const d = await call('cancelBooking', el.dataset.cancel, state.me, state.lang); apply(d);
+      toast(d.emailed ? t.emailedCancel(first(d.emailed)) : t.cancelledToast);
+    }
   } catch (err) { toast(errMsg(err)); }
   finally { el.disabled = false; }
 });
@@ -666,6 +679,7 @@ function demo(fn, ...args) {
     if (db.bookings.some(x => x.date === b.date && x.time === b.time && [x.by, x.with].some(n => n === b.by || n === b.with)))
       throw new Error(['ERR_CLASH', b.by, b.with, b.time].join('|'));
     db.bookings.push({ id: String(Date.now()), status: 'proposed', ...b });
+    return { ...JSON.parse(JSON.stringify(db)), emailed: b.with };
   }
   if (fn === 'confirmBooking') db.bookings.find(b => b.id === args[0]).status = 'confirmed';
   if (fn === 'cancelBooking') db.bookings = db.bookings.filter(b => b.id !== args[0]);
