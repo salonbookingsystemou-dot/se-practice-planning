@@ -14,11 +14,13 @@ const CONFIG = {
   NOW_SHEET: 'Now',           // "free right now" switches: one row per person with the time it ends     // photos uploaded from the app (small JPEGs, one row per person)
   TIMEZONE: 'Europe/Rome',
   MIN_GAP_MINUTES: 90,        // a person can't have two sessions closer than this
-  SEND_EMAILS: true,          // email notifications for proposals, confirmations and cancellations
+  SEND_EMAILS: true,
+  CREATE_MEET: true,          // when everyone has confirmed: calendar event + Google Meet link (needs the Calendar service, see ISTRUZIONI)
+  SESSION_MINUTES: 90,        // length of the calendar event          // email notifications for proposals, confirmations and cancellations
   SENDER_NAME: 'SE Practice Partners',
 };
 
-const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by'];
+const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by', 'Meet', 'Event'];
 
 /* ---------- JSON API used by the page on GitHub Pages ----------
    GET  …/exec?fn=getData                      → data
@@ -341,7 +343,13 @@ function confirmBooking(id, name, lang) {
     sheet.getRange(row, 11).setValue(b.confirmedBy.join(', '));
     sheet.getRange(row, 9).setValue(all ? 'confirmed' : 'proposed');
     b.allConfirmed = all;
-    return { event: 'confirmed', actor: who };
+    if (!all) return { event: 'confirmed', actor: who };
+    // Everyone is in: calendar event with a Meet link, then one email to all participants
+    if (!b.eventId) {
+      const ev = createEvent_(b, readPeople_());
+      if (ev.eventId) { sheet.getRange(row, 12, 1, 2).setValues([[ev.meet || '', ev.eventId]]); b.meet = ev.meet || ''; b.eventId = ev.eventId; }
+    }
+    return { event: 'scheduled', actor: who, everyone: true };
   }, lang);
 }
 
@@ -350,6 +358,7 @@ function cancelBooking(id, name, lang) {
     const who = participants_(b).find(function (n) { return key_(n) === key_(name); });
     if (!who) throw new Error('ERR_ONLY_PAIR');
     sheet.getRange(row, 9).setValue('cancelled');
+    if (b.eventId) removeEvent_(b.eventId);
     return { event: 'cancelled', actor: who };
   }, lang);
 }
@@ -365,16 +374,65 @@ function withBooking_(id, change, lang) {
       if (String(r[0]) !== String(id)) continue;
       const b = { id: String(r[0]), by: String(r[2]), with: String(r[3]), date: asDate_(r[4]), time: asTime_(r[5]),
         format: String(r[6]), note: String(r[7]), third: String(r[9] || ''),
-        confirmedBy: String(r[10] || '').split(',').map(function (x) { return x.trim(); }).filter(String) };
+        confirmedBy: String(r[10] || '').split(',').map(function (x) { return x.trim(); }).filter(String),
+        meet: String(r[11] || ''), eventId: String(r[12] || '') };
       const out = change(b, i + 1, sheet);
       const data = getData();
-      data.emailed = notify_(out.event, b, readPeople_(), lang, out.actor);
+      data.emailed = notify_(out.event, b, readPeople_(), lang, out.actor, out.everyone);
+      data.scheduled = out.event === 'scheduled';
+      data.meet = !!b.meet;
       return data;
     }
     throw new Error('ERR_NOT_FOUND');
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ---------- Calendar event with Google Meet ----------
+   Uses the advanced "Google Calendar API" service (identifier: Calendar). Without it, the session is still
+   confirmed and emailed, just without the Meet link. */
+
+function createEvent_(b, people) {
+  if (!CONFIG.CREATE_MEET || typeof Calendar === 'undefined') return {};
+  try {
+    const find = function (n) { return people.find(function (p) { return key_(p.name) === key_(n); }) || {}; };
+    const emails = participants_(b).map(function (n) { return find(n).email; }).filter(Boolean);
+    const online = b.format !== 'In person';
+    const resource = {
+      summary: 'Pratica SE · ' + participants_(b).join(', '),
+      description: (b.note ? b.note + '\n\n' : '') + 'Organizzata con SE Practice Partners · ' + appUrl_(),
+      start: { dateTime: localDateTime_(b.date, b.time, 0), timeZone: CONFIG.TIMEZONE },
+      end: { dateTime: localDateTime_(b.date, b.time, CONFIG.SESSION_MINUTES), timeZone: CONFIG.TIMEZONE },
+      attendees: emails.map(function (e) { return { email: e }; }),
+      guestsCanSeeOtherGuests: true,
+      reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 15 }] },
+    };
+    if (online) {
+      resource.conferenceData = { createRequest: { requestId: b.id + '-' + Date.now(), conferenceSolutionKey: { type: 'hangoutsMeet' } } };
+    }
+    // sendUpdates "none": our own email carries the details, so nobody gets two messages
+    const ev = Calendar.Events.insert(resource, 'primary', { conferenceDataVersion: 1, sendUpdates: 'none' });
+    const video = ((ev.conferenceData && ev.conferenceData.entryPoints) || []).find(function (e) { return e.entryPointType === 'video'; });
+    return { eventId: ev.id, meet: ev.hangoutLink || (video && video.uri) || '' };
+  } catch (e) {
+    console.error('Calendar event not created: ' + e);
+    return {};
+  }
+}
+
+function removeEvent_(eventId) {
+  if (typeof Calendar === 'undefined') return;
+  try { Calendar.Events.remove('primary', eventId, { sendUpdates: 'none' }); }
+  catch (e) { console.error('Calendar event not removed: ' + e); }
+}
+
+/* "2026-11-04", "19:00", +90 → "2026-11-04T20:30:00", computed without time-zone surprises */
+function localDateTime_(date, time, plusMinutes) {
+  const d = date.split('-').map(Number), t = time.split(':').map(Number);
+  const x = new Date(Date.UTC(d[0], d[1] - 1, d[2], t[0], t[1] + plusMinutes));
+  const pad = function (n) { return ('0' + n).slice(-2); };
+  return x.getUTCFullYear() + '-' + pad(x.getUTCMonth() + 1) + '-' + pad(x.getUTCDate()) + 'T' + pad(x.getUTCHours()) + ':' + pad(x.getUTCMinutes()) + ':00';
 }
 
 /* ---------- Email notifications ---------- */
@@ -387,10 +445,13 @@ const MAIL = {
     confirmed: { subject: function (v) { return v.actorFirst + ' ha confermato la sessione di pratica'; },
       lead: function (v) { return v.actor + ' ha confermato la sessione di pratica' + (v.allConfirmed ? ': ora è confermata da tutti.' : '. Si attende ancora la conferma di ' + v.pending + '.'); },
       action: 'Buona pratica!', button: 'Apri l\'app' },
+    scheduled: { subject: function (v) { return 'Sessione confermata · ' + v.whenShort + (v.meet ? ' · link Meet' : ''); },
+      lead: function (v) { return 'La sessione di pratica è confermata da tutti.' + (v.meet ? ' Ecco il link per collegarvi.' : ''); },
+      action: 'Buona pratica!', button: 'Entra su Google Meet', buttonNoMeet: 'Apri l\'app' },
     cancelled: { subject: function (v) { return 'Sessione di pratica annullata · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' ha annullato questa sessione di pratica:'; },
       action: 'Se volete, potete proporne un\'altra dall\'app.', button: 'Apri l\'app' },
-    labels: { when: 'Quando', format: 'Formato', who: 'Partecipanti', note: 'Nota', at: 'alle', and: 'e' },
+    labels: { when: 'Quando', format: 'Formato', who: 'Partecipanti', note: 'Nota', at: 'alle', and: 'e', meet: 'Google Meet', app: 'App' },
     formats: { 'Online': 'Online', 'In person': 'In presenza' },
     footer: 'Ricevi questa email perché hai inserito le tue disponibilità per la pratica SE tra compagni di corso.',
     locale: 'it',
@@ -402,10 +463,13 @@ const MAIL = {
     confirmed: { subject: function (v) { return v.actorFirst + ' confirmed the practice session'; },
       lead: function (v) { return v.actor + ' confirmed the practice session' + (v.allConfirmed ? ': everyone has now confirmed.' : '. Still waiting for ' + v.pending + '.'); },
       action: 'Enjoy the practice!', button: 'Open the app' },
+    scheduled: { subject: function (v) { return 'Session confirmed · ' + v.whenShort + (v.meet ? ' · Meet link' : ''); },
+      lead: function (v) { return 'The practice session is confirmed by everyone.' + (v.meet ? ' Here is the link to join.' : ''); },
+      action: 'Enjoy the practice!', button: 'Join on Google Meet', buttonNoMeet: 'Open the app' },
     cancelled: { subject: function (v) { return 'Practice session cancelled · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' cancelled this practice session:'; },
       action: 'You can propose another one from the app.', button: 'Open the app' },
-    labels: { when: 'When', format: 'Format', who: 'People', note: 'Note', at: 'at', and: 'and' },
+    labels: { when: 'When', format: 'Format', who: 'People', note: 'Note', at: 'at', and: 'and', meet: 'Google Meet', app: 'App' },
     formats: { 'Online': 'Online', 'In person': 'In person' },
     footer: 'You receive this email because you shared your availability for SE peer practice.',
     locale: 'en',
@@ -414,7 +478,7 @@ const MAIL = {
 
 /* Sends the emails for an event and returns the names of the people emailed. Never blocks the booking.
    proposed → everyone invited · confirmed → everyone except the person confirming · cancelled → everyone except who cancelled */
-function notify_(event, b, people, lang, actor) {
+function notify_(event, b, people, lang, actor, everyone) {
   if (!CONFIG.SEND_EMAILS) return [];
   const t = MAIL[lang] || MAIL.it;
   const tpl = t[event];
@@ -423,8 +487,8 @@ function notify_(event, b, people, lang, actor) {
   const joinNames = function (list) {
     return list.length < 2 ? list.join('') : list.slice(0, -1).join(', ') + ' ' + t.labels.and + ' ' + list[list.length - 1];
   };
-  const everyone = participants_(b);
-  const recipients = everyone.filter(function (n) { return key_(n) !== key_(actor); });
+  const all = participants_(b);
+  const recipients = everyone ? all : all.filter(function (n) { return key_(n) !== key_(actor); });
   const actorP = find(actor);
   const d = dateLabel_(b.date, t.locale);
   const sent = [];
@@ -433,24 +497,27 @@ function notify_(event, b, people, lang, actor) {
     try {
       const to = find(name);
       if (!to.email || MailApp.getRemainingDailyQuota() < 1) return;
-      const others = event === 'proposed' ? everyone.filter(function (n) { return n !== actor && n !== name; }) : [];
+      const others = event === 'proposed' ? all.filter(function (n) { return n !== actor && n !== name; }) : [];
       const pending = invitees_(b).filter(function (n) { return (b.confirmedBy || []).indexOf(n) === -1; });
       const v = { actor: actor, actorFirst: first(actor), others: joinNames(others), allConfirmed: !!b.allConfirmed,
-                  pending: joinNames(pending), whenShort: d.short + ' ' + b.time };
+                  pending: joinNames(pending), whenShort: d.short + ' ' + b.time, meet: b.meet || '' };
       const rows = [[t.labels.when, d.long + ' ' + t.labels.at + ' ' + b.time], [t.labels.format, t.formats[b.format] || b.format]];
-      if (everyone.length > 2) rows.push([t.labels.who, joinNames(everyone)]);
+      if (all.length > 2 || event === 'scheduled') rows.push([t.labels.who, joinNames(all)]);
+      if (event === 'scheduled' && b.meet) rows.push([t.labels.meet, b.meet]);
       if (b.note) rows.push([t.labels.note, b.note]);
 
-      const url = personalUrl_(to.name);   // opens the app with their name already chosen
+      const appLink = personalUrl_(to.name);   // opens the app with their name already chosen
+      const url = event === 'scheduled' && b.meet ? b.meet : appLink;
+      const button = event === 'scheduled' && !b.meet ? tpl.buttonNoMeet : tpl.button;
       const text = [tpl.lead(v), ''].concat(rows.map(function (r) { return r[0] + ': ' + r[1]; }),
-        ['', tpl.action, url, '', '—', t.footer]).join('\n');
+        ['', tpl.action, url].concat(url !== appLink ? [t.labels.app + ': ' + appLink] : [], ['', '—', t.footer])).join('\n');
       const table = '<table style="border-collapse:collapse;width:100%;font-size:15px;margin-bottom:20px">' +
         rows.map(function (r) {
           return '<tr><td style="padding:8px 0;border-top:1px solid #EFE8EC;color:#6E686B;width:110px;vertical-align:top">' + esc_(r[0]) +
             '</td><td style="padding:8px 0;border-top:1px solid #EFE8EC">' + esc_(r[1]) + '</td></tr>';
         }).join('') + '</table>' +
         '<p style="margin:0 0 18px;font-size:15px">' + esc_(tpl.action) + '</p>';
-      const html = mailFrame_(tpl.lead(v), table, url, tpl.button, t.footer);
+      const html = mailFrame_(tpl.lead(v), table, url, button, t.footer);
 
       const opts = { name: CONFIG.SENDER_NAME, htmlBody: html };
       if (actorP.email) opts.replyTo = actorP.email;   // replies go to the student who acted, not to the app owner

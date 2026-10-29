@@ -403,6 +403,8 @@ const STR = {
     doneWa: 'La sessione è nella lista. Manda il messaggio, così possono confermarla.',
     doneEmailed: (n) => `Abbiamo mandato un'email a ${n}. Se vuoi, avvisa anche su WhatsApp.`,
     emailedConfirm: (n) => `Sessione confermata. Abbiamo avvisato ${n} via email.`,
+    scheduledMeet: 'Confermata da tutti: il link Google Meet è arrivato via email a ogni partecipante.',
+    scheduledNoMeet: 'Confermata da tutti: abbiamo avvisato i partecipanti via email.', meetByEmail: 'link Meet nell\'email',
     emailedCancel: (n) => `Sessione annullata. Abbiamo avvisato ${n} via email.`,
     doneNoPhone: (n) => `${n}: nessun numero inserito. Copia il messaggio e mandalo nel gruppo o in privato.`,
     waTo: (n) => `WhatsApp a ${n}`,
@@ -483,6 +485,8 @@ const STR = {
     doneEmailed: (n) => `We emailed ${n}. You can also let them know on WhatsApp.`,
     waTo: (n) => `WhatsApp ${n}`,
     emailedConfirm: (n) => `Session confirmed. We emailed ${n}.`,
+    scheduledMeet: 'Confirmed by everyone: each participant got the Google Meet link by email.',
+    scheduledNoMeet: 'Confirmed by everyone: we emailed all participants.', meetByEmail: 'Meet link in the email',
     emailedCancel: (n) => `Session cancelled. We emailed ${n}.`,
     doneNoPhone: (n) => `${n}: no phone number shared. Copy the message and send it in the group or in private.`,
     message: 'Message', close: 'Close', copy: 'Copy message', tellWa: 'Tell them on WhatsApp',
@@ -797,7 +801,7 @@ function renderSessions() {
       return `<div class="session">
         <span class="time">${esc(b.time)}</span>
         <div class="pair"><strong>${esc(b.by)}</strong> ${esc(t.withWord)} ${inv.map(n => `<strong>${esc(n)}</strong>`).join(' ' + esc(t.and) + ' ')}
-          <div class="meta">${esc(tv(b.format))}${b.note ? ' · ' + esc(b.note) : ''}</div></div>
+          <div class="meta">${esc(tv(b.format))}${b.note ? ' · ' + esc(b.note) : ''}${b.status === 'confirmed' && mine && b.format !== 'In person' ? ' · ' + esc(t.meetByEmail) : ''}</div></div>
         <span class="status ${statusClass}">${esc(statusLabel)}</span>
         ${mine ? `<div class="actions">
           ${canConfirm ? `<button class="btn btn-small" data-confirm="${esc(b.id)}">${esc(t.confirm)}</button>` : ''}
@@ -1104,7 +1108,8 @@ document.addEventListener('click', async (e) => {
   try {
     if (el.dataset.confirm) {
       const d = await call('confirmBooking', el.dataset.confirm, state.me, state.lang); apply(d);
-      toast(asList(d.emailed).length ? t.emailedConfirm(joinNames(asList(d.emailed).map(first))) : t.confirmedToast);
+      toast(d.scheduled ? (d.meet ? t.scheduledMeet : t.scheduledNoMeet)
+            : asList(d.emailed).length ? t.emailedConfirm(joinNames(asList(d.emailed).map(first))) : t.confirmedToast);
     }
     if (el.dataset.cancel && confirm(t.cancelAsk)) {
       const d = await call('cancelBooking', el.dataset.cancel, state.me, state.lang); apply(d);
@@ -1171,7 +1176,10 @@ function demo(fn, ...args) {
   if (fn === 'confirmBooking') {
     const b = db.bookings.find(x => x.id === args[0]);
     if (!b.confirmedBy.includes(args[1])) b.confirmedBy.push(args[1]);
-    if ([b.with, b.third].filter(Boolean).every(n => b.confirmedBy.includes(n))) b.status = 'confirmed';
+    if ([b.with, b.third].filter(Boolean).every(n => b.confirmedBy.includes(n))) {
+      b.status = 'confirmed';
+      return { ...JSON.parse(JSON.stringify(db)), scheduled: true, meet: b.format !== 'In person' };
+    }
   }
   if (fn === 'cancelBooking') db.bookings = db.bookings.filter(b => b.id !== args[0]);
   db.bookings.sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));

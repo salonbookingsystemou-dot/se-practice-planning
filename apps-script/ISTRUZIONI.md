@@ -50,6 +50,17 @@ Nella propria card c'è uno switch con una durata (30 min, 1, 2 o 3 ore): finch�
 compare tra i «Liberi ora» e gli altri hanno il pulsante «Proponi adesso» (oggi, al prossimo quarto d'ora).
 Si spegne da solo allo scadere. La pagina aggiorna questo stato ogni minuto. I dati stanno nel foglio «Now».
 
+## Google Meet alla conferma
+Quando **tutti** gli invitati hanno confermato, lo script crea nel tuo Google Calendar un evento (durata `SESSION_MINUTES`,
+90 minuti) con i partecipanti come invitati e, per le sessioni online, un **link Google Meet**. Poi manda a tutti
+un'email «Sessione confermata» con il pulsante «Entra su Google Meet». Se la sessione viene annullata, l'evento si cancella.
+Il link Meet arriva solo via email: non compare nella pagina.
+
+**Attivazione (una volta):** in Apps Script, a sinistra, **Servizi → +** → **Google Calendar API** → **Aggiungi**
+(identificatore `Calendar`). Poi esegui una funzione qualsiasi (per esempio `testEmail`), autorizza il calendario
+e pubblica una **Nuova versione**. Senza il servizio, la conferma funziona lo stesso ma senza link Meet.
+Per spegnere: `CREATE_MEET: false`.
+
 ## Prova senza dati veri
 Apri `index.html` dal computer, oppure `se-practice.mnesti.it/?demo`: usa dati di esempio e non scrive nulla.
 
