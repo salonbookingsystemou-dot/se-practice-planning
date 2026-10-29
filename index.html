@@ -375,6 +375,7 @@ function errMsg(err) {
    The page runs on GitHub Pages and talks to the Apps Script web app.
    Opened as a local file it uses the sample data at the bottom. */
 const API_URL = 'https://script.google.com/macros/s/AKfycbyfsxbMAqalhVvyZ3z8Z3tCQn7l3N_ZMvtSPhKc5M3YwwfBRpjH0wd8CR1fYxNCZSpJ/exec';
+const FORM_URL = 'https://forms.gle/Je4gaWUF94cij7Vb8';   // Google Form for availability
 const USE_SAMPLE = location.protocol === 'file:' || /[?&]demo\b/.test(location.search);
 
 async function call(fn, ...args) {
@@ -629,7 +630,7 @@ function setMe(name) { state.me = name; try { localStorage.setItem('se-me', name
 function setLang(l) { state.lang = l; try { localStorage.setItem('se-lang', l); } catch (e) {} applyTexts(); render(); }
 function apply(data) {
   state.people = data.people; state.bookings = data.bookings; state.today = data.today;
-  state.formUrl = data.formUrl || ''; state.appUrl = data.appUrl || ''; render();
+  state.formUrl = FORM_URL || data.formUrl || ''; state.appUrl = data.appUrl || ''; render();
 }
 function selectTab(tab) {
   $('tab-people').setAttribute('aria-selected', String(tab === 'people'));
