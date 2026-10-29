@@ -65,9 +65,14 @@
              padding: 16px 26px; font-size: 17px; border-radius: 99px; min-height: 56px; }
   .cta .btn-big:hover { background: #BF5212; }
   .cta .btn-big:focus-visible { outline-color: #fff; }
-  .update { margin: -12px 0 20px; font-size: 14px; color: var(--muted); }
-  .update a { color: var(--accent); font-weight: 600; }
-  @media (max-width: 600px) { .cta { padding: 22px 20px; } .btn-big { width: 100%; justify-content: center; } }
+  .update { margin: -12px 0 20px; font-size: 14px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .btn-edit { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+  .cta-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .cta .btn-big-secondary { display: inline-flex; align-items: center; background: transparent; color: #fff; text-decoration: none;
+    border: 1.5px solid rgba(255,255,255,.55); padding: 14px 22px; font-size: 15px; border-radius: 99px; min-height: 52px; }
+  .cta .btn-big-secondary:hover { background: rgba(255,255,255,.12); }
+  .cta .btn-big-secondary:focus-visible { outline-color: #fff; }
+  @media (max-width: 600px) { .cta { padding: 22px 20px; } .cta-actions { width: 100%; } .btn-big, .btn-big-secondary { width: 100%; justify-content: center; } }
   .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
   .tab { background: none; border: 0; padding: 12px 16px; cursor: pointer; color: var(--muted); font-weight: 500; border-bottom: 3px solid transparent; margin-bottom: -1px; }
   .tab[aria-selected=true] { color: var(--ink); border-color: var(--accent); font-weight: 600; }
@@ -219,9 +224,13 @@
       <h2 data-i18n="ctaTitle"></h2>
       <p data-i18n="ctaText"></p>
     </div>
-    <a class="btn btn-big" id="cta-link" href="#" target="_blank" rel="noopener" data-i18n="ctaButton"></a>
+    <div class="cta-actions">
+      <a class="btn btn-big" id="cta-link" href="#" target="_blank" rel="noopener" data-i18n="ctaButton"></a>
+      <a class="btn btn-big-secondary" id="cta-edit" href="#" target="_blank" rel="noopener" data-i18n="editData"></a>
+    </div>
   </aside>
-  <p class="update" id="update" hidden><span data-i18n="updateText"></span> <a id="update-link" href="#" target="_blank" rel="noopener" data-i18n="updateLink"></a></p>
+  <p class="update" id="update" hidden><span data-i18n="updateText"></span>
+    <a class="btn btn-ghost btn-small btn-edit" id="update-link" href="#" target="_blank" rel="noopener"><span aria-hidden="true">✎</span> <span data-i18n="editData"></span></a></p>
 
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" id="tab-people" aria-selected="true" aria-controls="panel-people"><span data-i18n="tabPeople"></span><span class="count" id="c-people">0</span></button>
@@ -295,7 +304,7 @@ const STR = {
     ctaTitle: 'Non sei ancora nella lista?',
     ctaText: 'Inserisci le tue disponibilità in un minuto, così gli altri possono trovarti e proporti una sessione.',
     ctaButton: 'Inserisci le disponibilità →',
-    updateText: 'Sono cambiati i tuoi orari?', updateLink: 'Aggiorna le disponibilità',
+    updateText: 'Sono cambiati i tuoi orari?', editData: 'Modifica i tuoi dati',
     tabPeople: 'Persone', tabSessions: 'Sessioni',
     search: 'Cerca per nome o città',
     fFormat: 'Formato', fDay: 'Giorno', fTime: 'Orario', filters: 'Filtri', resetFilters: 'Azzera filtri',
@@ -351,7 +360,7 @@ const STR = {
     ctaTitle: 'Not on the list yet?',
     ctaText: 'Add your availability in one minute, so others can find you and propose a session.',
     ctaButton: 'Add your availability →',
-    updateText: 'Changed your schedule?', updateLink: 'Update your availability',
+    updateText: 'Changed your schedule?', editData: 'Edit your details',
     tabPeople: 'People', tabSessions: 'Sessions',
     search: 'Search by name or city',
     fFormat: 'Format', fDay: 'Day', fTime: 'Time', filters: 'Filters', resetFilters: 'Clear filters',
@@ -558,7 +567,7 @@ function renderMe() {
   const url = state.formUrl;
   $('cta').hidden = !url || !!meP();
   $('update').hidden = !url || !meP();
-  if (url) { $('cta-link').href = url; $('update-link').href = url; }
+  if (url) { $('cta-link').href = url; $('cta-edit').href = url; $('update-link').href = url; }
 }
 
 function renderPeople() {

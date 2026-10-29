@@ -23,6 +23,9 @@ Aggiornando sempre lo **stesso** deployment (Nuova versione), l'URL non cambia.
 ## Modulo Google
 - Titoli delle domande con queste parole chiave: *Name, Region, Session format, Available days, time slots, How often, setup, Language, Phone, Notes, Photo*.
 - Email: attiva **Raccogli indirizzi email** nelle impostazioni del modulo (oppure una domanda con «email» nel titolo).
+- Per «Modifica i tuoi dati» nelle **Impostazioni → Risposte** del modulo attiva:
+  **Consenti la modifica delle risposte** e **Limita a 1 risposta** (richiede l'accesso con Google).
+  Chi riapre il modulo vede così la propria risposta e la corregge, invece di crearne una nuova.
 - Foto facoltativa: domanda **Caricamento file** intitolata «Photo (optional)», solo immagini, 1 file.
 
 ## Notifiche email
