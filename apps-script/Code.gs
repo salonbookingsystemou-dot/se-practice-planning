@@ -10,19 +10,21 @@ const CONFIG = {
   APP_URL: 'https://se-practice.mnesti.it',                                // short link to the app (e.g. https://pratica.mnesti.it); empty = Apps Script URL
   RESPONSES_SHEET: '',      // leave empty to auto-detect the sheet with the form responses
   BOOKINGS_SHEET: 'Bookings',
+  PHOTOS_SHEET: 'Photos',     // photos uploaded from the app (small JPEGs, one row per person)
   TIMEZONE: 'Europe/Rome',
   MIN_GAP_MINUTES: 90,        // a person can't have two sessions closer than this
   SEND_EMAILS: true,          // email notifications for proposals, confirmations and cancellations
   SENDER_NAME: 'SE Practice Partners',
 };
 
-const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status'];
+const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by'];
 
 /* ---------- JSON API used by the page on GitHub Pages ----------
    GET  …/exec?fn=getData                      → data
    POST …/exec  body: {"fn": "...", "args": [...]}  (sent as text/plain to avoid CORS preflight) */
 
-const API = { getData: getData, createBooking: createBooking, confirmBooking: confirmBooking, cancelBooking: cancelBooking };
+const API = { getData: getData, createBooking: createBooking, confirmBooking: confirmBooking, cancelBooking: cancelBooking,
+              whoAmI: whoAmI, sendMyLink: sendMyLink, uploadPhoto: uploadPhoto };
 
 function doGet(e) {
   const fn = e && e.parameter && e.parameter.fn;
@@ -68,6 +70,7 @@ function readPeople_() {
   const col = mapColumns_(values[0]);
   const byName = {};
 
+  const uploaded = readPhotos_();
   values.slice(1).forEach(function (row) {
     const name = String(row[col.name] || '').trim();
     if (!name) return;
@@ -82,7 +85,7 @@ function readPeople_() {
       languages: list_(row, col.languages),
       phone: cell_(row, col.phone),
       notes: cell_(row, col.notes),
-      photo: photo_(cell_(row, col.photo)),
+      photo: uploaded[personKey_(name)] || photo_(cell_(row, col.photo)),
       email: /@/.test(cell_(row, col.email)) ? cell_(row, col.email) : '',
     };
   });
@@ -125,10 +128,110 @@ function readBookings_() {
         format: String(r[6]),
         note: String(r[7]),
         status: String(r[8] || 'proposed'),
+        third: String(r[9] || ''),
+        confirmedBy: String(r[10] || '').split(',').map(function (x) { return x.trim(); }).filter(String),
       };
     })
     .filter(function (b) { return b.id && b.date >= now && b.status !== 'cancelled'; })
     .sort(function (a, b) { return (a.date + a.time).localeCompare(b.date + b.time); });
+}
+
+function participants_(b) { return [b.by, b.with].concat(b.third ? [b.third] : []); }
+function invitees_(b) { return [b.with].concat(b.third ? [b.third] : []); }
+
+/* ---------- Personal links ----------
+   Each person has a secret key derived from their name and a random salt kept in the script properties.
+   Keys never reach the page in bulk: they only travel in emails sent to that person (…/?me=<key>). */
+
+function salt_() {
+  const props = PropertiesService.getScriptProperties();
+  var salt = props.getProperty('SALT');
+  if (!salt) { salt = Utilities.getUuid() + Utilities.getUuid(); props.setProperty('SALT', salt); }
+  return salt;
+}
+
+function personKey_(name) {
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt_() + '|' + key_(name));
+  return Utilities.base64EncodeWebSafe(bytes).replace(/[^A-Za-z0-9]/g, '').slice(0, 16);
+}
+
+function personalUrl_(name) { return appUrl_().replace(/\/?$/, '/') + '?me=' + personKey_(name); }
+
+function personByKey_(k) {
+  if (!k) return null;
+  return readPeople_().find(function (p) { return personKey_(p.name) === k; }) || null;
+}
+
+/* The page calls this when opened from a personal link */
+function whoAmI(k) {
+  const p = personByKey_(k);
+  return p ? { name: p.name } : null;
+}
+
+/* Emails someone their personal link (no more than once every 10 minutes per person) */
+function sendMyLink(name, lang) {
+  const p = readPeople_().find(function (x) { return key_(x.name) === key_(name); });
+  if (!p) throw new Error('ERR_PICK_TWO');
+  if (!p.email) throw new Error('ERR_NO_EMAIL');
+  const cache = CacheService.getScriptCache();
+  if (cache.get('link_' + key_(p.name))) return { sent: true };
+  const it = (lang || 'it') === 'it';
+  const url = personalUrl_(p.name);
+  const lead = it ? 'Ecco il tuo link personale per l\'app dei compagni di pratica SE.'
+                  : 'Here is your personal link to the SE practice partners app.';
+  const body = it ? 'Aprendolo, l\'app ti riconosce subito e puoi caricare la tua foto. Tienilo per te.'
+                  : 'Opening it, the app recognises you right away and you can upload your photo. Keep it to yourself.';
+  const button = it ? 'Apri l\'app' : 'Open the app';
+  const html = mailFrame_(lead, '<p style="margin:0 0 18px;font-size:15px">' + esc_(body) + '</p>', url, button, MAIL[it ? 'it' : 'en'].footer);
+  MailApp.sendEmail(p.email, it ? 'Il tuo link personale · SE Practice Partners' : 'Your personal link · SE Practice Partners',
+    lead + '\n\n' + body + '\n' + url, { name: CONFIG.SENDER_NAME, htmlBody: html });
+  cache.put('link_' + key_(p.name), '1', 600);
+  return { sent: true };
+}
+
+/* Photo uploaded from the app: a small square JPEG prepared in the browser, saved in the Photos sheet */
+function uploadPhoto(k, dataUrl) {
+  const p = personByKey_(k);
+  if (!p) throw new Error('ERR_NOT_YOU');
+  if (!/^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/.test(String(dataUrl || '')) || dataUrl.length > 48000) {
+    throw new Error('ERR_PHOTO');
+  }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = photosSheet_();
+    const pk = personKey_(p.name);
+    const values = sheet.getDataRange().getValues();
+    for (var i = 1; i < values.length; i++) {
+      if (String(values[i][0]) === pk) {
+        sheet.getRange(i + 1, 2, 1, 3).setValues([[p.name, dataUrl, new Date()]]);
+        return getData();
+      }
+    }
+    sheet.appendRow([pk, p.name, dataUrl, new Date()]);
+    return getData();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function readPhotos_() {
+  const out = {};
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.PHOTOS_SHEET);
+  if (!sheet) return out;
+  sheet.getDataRange().getValues().slice(1).forEach(function (r) { if (r[0] && r[2]) out[String(r[0])] = String(r[2]); });
+  return out;
+}
+
+function photosSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CONFIG.PHOTOS_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.PHOTOS_SHEET);
+    sheet.getRange(1, 1, 1, 4).setValues([['Key', 'Name', 'Photo', 'Updated']]).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
 }
 
 /* ---------- Actions ---------- */
@@ -143,61 +246,74 @@ function createBooking(input) {
 
     const by = names[key_(input.by)];
     const withName = names[key_(input.with)];
-    if (!by || !withName) throw new Error('ERR_PICK_TWO');
+    const third = input.third ? names[key_(input.third)] : '';
+    if (!by || !withName || (input.third && !third)) throw new Error('ERR_PICK_TWO');
     if (by === withName) throw new Error('ERR_SELF');
+    if (third && (third === by || third === withName)) throw new Error('ERR_THIRD');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date || '')) throw new Error('ERR_DATE');
     if (!/^\d{2}:\d{2}$/.test(input.time || '')) throw new Error('ERR_TIME');
     if (input.date < today_()) throw new Error('ERR_PAST');
 
-    const start = minutes_(input.time);
-    const clash = readBookings_().find(function (b) {
-      const involved = [b.by, b.with].some(function (n) { return n === by || n === withName; });
-      return involved && b.date === input.date && Math.abs(minutes_(b.time) - start) < CONFIG.MIN_GAP_MINUTES;
-    });
-    if (clash) {
-      throw new Error(['ERR_CLASH', clash.by, clash.with, clash.time].join('|'));
-    }
-
     const booking = {
-      id: Utilities.getUuid().slice(0, 8), by: by, with: withName, date: input.date, time: input.time,
+      id: Utilities.getUuid().slice(0, 8), by: by, with: withName, third: third, date: input.date, time: input.time,
       format: String(input.format || '').slice(0, 40), note: String(input.note || '').slice(0, 300),
     };
+    const mine = participants_(booking);
+    const start = minutes_(input.time);
+    const clash = readBookings_().find(function (b) {
+      const involved = participants_(b).some(function (n) { return mine.indexOf(n) !== -1; });
+      return involved && b.date === input.date && Math.abs(minutes_(b.time) - start) < CONFIG.MIN_GAP_MINUTES;
+    });
+    if (clash) throw new Error(['ERR_CLASH', clash.by, clash.with, clash.time].join('|'));
+
     bookingsSheet_().appendRow([booking.id, new Date(), booking.by, booking.with, booking.date, booking.time,
-      booking.format, booking.note, 'proposed']);
+      booking.format, booking.note, 'proposed', booking.third, '']);
     const data = getData();
-    data.emailed = notify_('proposed', booking, people, input.lang);
+    data.emailed = notify_('proposed', booking, people, input.lang, by);
     return data;
   } finally {
     lock.releaseLock();
   }
 }
 
+/* Each invited person confirms for themselves; the session is "confirmed" once everyone invited has confirmed. */
 function confirmBooking(id, name, lang) {
-  return updateStatus_(id, name, 'confirmed', function (b) { return key_(b.with) === key_(name); },
-    'ERR_ONLY_INVITED', lang);
+  return withBooking_(id, function (b, row, sheet) {
+    const who = invitees_(b).find(function (n) { return key_(n) === key_(name); });
+    if (!who) throw new Error('ERR_ONLY_INVITED');
+    if (b.confirmedBy.indexOf(who) === -1) b.confirmedBy.push(who);
+    const all = invitees_(b).every(function (n) { return b.confirmedBy.indexOf(n) !== -1; });
+    sheet.getRange(row, 11).setValue(b.confirmedBy.join(', '));
+    sheet.getRange(row, 9).setValue(all ? 'confirmed' : 'proposed');
+    b.allConfirmed = all;
+    return { event: 'confirmed', actor: who };
+  }, lang);
 }
 
 function cancelBooking(id, name, lang) {
-  return updateStatus_(id, name, 'cancelled', function (b) {
-    return key_(b.with) === key_(name) || key_(b.by) === key_(name);
-  }, 'ERR_ONLY_PAIR', lang);
+  return withBooking_(id, function (b, row, sheet) {
+    const who = participants_(b).find(function (n) { return key_(n) === key_(name); });
+    if (!who) throw new Error('ERR_ONLY_PAIR');
+    sheet.getRange(row, 9).setValue('cancelled');
+    return { event: 'cancelled', actor: who };
+  }, lang);
 }
 
-function updateStatus_(id, name, status, allowed, refusal, lang) {
+function withBooking_(id, change, lang) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
     const sheet = bookingsSheet_();
     const values = sheet.getDataRange().getValues();
     for (var i = 1; i < values.length; i++) {
-      if (String(values[i][0]) !== String(id)) continue;
-      if (!allowed({ by: values[i][2], with: values[i][3] })) throw new Error(refusal);
-      sheet.getRange(i + 1, 9).setValue(status);
       const r = values[i];
-      const booking = { id: String(r[0]), by: String(r[2]), with: String(r[3]), date: asDate_(r[4]),
-                        time: asTime_(r[5]), format: String(r[6]), note: String(r[7]), actor: name };
+      if (String(r[0]) !== String(id)) continue;
+      const b = { id: String(r[0]), by: String(r[2]), with: String(r[3]), date: asDate_(r[4]), time: asTime_(r[5]),
+        format: String(r[6]), note: String(r[7]), third: String(r[9] || ''),
+        confirmedBy: String(r[10] || '').split(',').map(function (x) { return x.trim(); }).filter(String) };
+      const out = change(b, i + 1, sheet);
       const data = getData();
-      data.emailed = notify_(status, booking, readPeople_(), lang);
+      data.emailed = notify_(out.event, b, readPeople_(), lang, out.actor);
       return data;
     }
     throw new Error('ERR_NOT_FOUND');
@@ -210,92 +326,96 @@ function updateStatus_(id, name, status, allowed, refusal, lang) {
 
 const MAIL = {
   it: {
-    proposed: { to: 'with', subject: function (b) { return b.byFirst + ' ti propone una sessione di pratica SE'; },
-      lead: function (b) { return b.by + ' ti ha proposto una sessione di pratica:'; },
+    proposed: { subject: function (v) { return v.actorFirst + ' ti propone una sessione di pratica SE'; },
+      lead: function (v) { return v.actor + ' ti ha proposto una sessione di pratica' + (v.others ? ' insieme a ' + v.others : '') + ':'; },
       action: 'Apri l\'app per confermarla o annullarla.', button: 'Conferma la sessione' },
-    confirmed: { to: 'by', subject: function (b) { return b.withFirst + ' ha confermato la sessione di pratica'; },
-      lead: function (b) { return b.with + ' ha confermato la sessione che gli/le hai proposto:'; },
+    confirmed: { subject: function (v) { return v.actorFirst + ' ha confermato la sessione di pratica'; },
+      lead: function (v) { return v.actor + ' ha confermato la sessione di pratica' + (v.allConfirmed ? ': ora è confermata da tutti.' : '. Si attende ancora la conferma di ' + v.pending + '.'); },
       action: 'Buona pratica!', button: 'Apri l\'app' },
-    cancelled: { to: 'other', subject: function (b) { return 'Sessione di pratica annullata · ' + b.whenShort; },
-      lead: function (b) { return b.actorName + ' ha annullato questa sessione di pratica:'; },
+    cancelled: { subject: function (v) { return 'Sessione di pratica annullata · ' + v.whenShort; },
+      lead: function (v) { return v.actor + ' ha annullato questa sessione di pratica:'; },
       action: 'Se volete, potete proporne un\'altra dall\'app.', button: 'Apri l\'app' },
-    labels: { when: 'Quando', format: 'Formato', note: 'Nota', at: 'alle' },
+    labels: { when: 'Quando', format: 'Formato', who: 'Partecipanti', note: 'Nota', at: 'alle', and: 'e' },
     formats: { 'Online': 'Online', 'In person': 'In presenza' },
     footer: 'Ricevi questa email perché hai inserito le tue disponibilità per la pratica SE tra compagni di corso.',
     locale: 'it',
   },
   en: {
-    proposed: { to: 'with', subject: function (b) { return b.byFirst + ' proposed an SE practice session'; },
-      lead: function (b) { return b.by + ' proposed a practice session with you:'; },
+    proposed: { subject: function (v) { return v.actorFirst + ' proposed an SE practice session'; },
+      lead: function (v) { return v.actor + ' proposed a practice session with you' + (v.others ? ' and ' + v.others : '') + ':'; },
       action: 'Open the app to confirm or cancel it.', button: 'Confirm the session' },
-    confirmed: { to: 'by', subject: function (b) { return b.withFirst + ' confirmed your practice session'; },
-      lead: function (b) { return b.with + ' confirmed the session you proposed:'; },
+    confirmed: { subject: function (v) { return v.actorFirst + ' confirmed the practice session'; },
+      lead: function (v) { return v.actor + ' confirmed the practice session' + (v.allConfirmed ? ': everyone has now confirmed.' : '. Still waiting for ' + v.pending + '.'); },
       action: 'Enjoy the practice!', button: 'Open the app' },
-    cancelled: { to: 'other', subject: function (b) { return 'Practice session cancelled · ' + b.whenShort; },
-      lead: function (b) { return b.actorName + ' cancelled this practice session:'; },
+    cancelled: { subject: function (v) { return 'Practice session cancelled · ' + v.whenShort; },
+      lead: function (v) { return v.actor + ' cancelled this practice session:'; },
       action: 'You can propose another one from the app.', button: 'Open the app' },
-    labels: { when: 'When', format: 'Format', note: 'Note', at: 'at' },
+    labels: { when: 'When', format: 'Format', who: 'People', note: 'Note', at: 'at', and: 'and' },
     formats: { 'Online': 'Online', 'In person': 'In person' },
     footer: 'You receive this email because you shared your availability for SE peer practice.',
     locale: 'en',
   },
 };
 
-/* Sends one email for the event; returns the recipient's name if sent, '' otherwise. Never blocks the booking. */
-function notify_(event, b, people, lang) {
-  if (!CONFIG.SEND_EMAILS) return '';
-  try {
-    const t = MAIL[lang] || MAIL.it;
-    const tpl = t[event];
-    const find = function (n) { return people.find(function (p) { return key_(p.name) === key_(n); }) || {}; };
-    const byP = find(b.by), withP = find(b.with);
-    var to, from;
-    if (tpl.to === 'with') { to = withP; from = byP; }
-    else if (tpl.to === 'by') { to = byP; from = withP; }
-    else {   // cancellation: tell the person who did NOT cancel
-      const actorIsBy = key_(b.actor) === key_(b.by);
-      to = actorIsBy ? withP : byP; from = actorIsBy ? byP : withP;
+/* Sends the emails for an event and returns the names of the people emailed. Never blocks the booking.
+   proposed → everyone invited · confirmed → everyone except the person confirming · cancelled → everyone except who cancelled */
+function notify_(event, b, people, lang, actor) {
+  if (!CONFIG.SEND_EMAILS) return [];
+  const t = MAIL[lang] || MAIL.it;
+  const tpl = t[event];
+  const find = function (n) { return people.find(function (p) { return key_(p.name) === key_(n); }) || { name: n }; };
+  const first = function (n) { return String(n).split(/\s+/)[0]; };
+  const joinNames = function (list) {
+    return list.length < 2 ? list.join('') : list.slice(0, -1).join(', ') + ' ' + t.labels.and + ' ' + list[list.length - 1];
+  };
+  const everyone = participants_(b);
+  const recipients = everyone.filter(function (n) { return key_(n) !== key_(actor); });
+  const actorP = find(actor);
+  const d = dateLabel_(b.date, t.locale);
+  const sent = [];
+
+  recipients.forEach(function (name) {
+    try {
+      const to = find(name);
+      if (!to.email || MailApp.getRemainingDailyQuota() < 1) return;
+      const others = event === 'proposed' ? everyone.filter(function (n) { return n !== actor && n !== name; }) : [];
+      const pending = invitees_(b).filter(function (n) { return (b.confirmedBy || []).indexOf(n) === -1; });
+      const v = { actor: actor, actorFirst: first(actor), others: joinNames(others), allConfirmed: !!b.allConfirmed,
+                  pending: joinNames(pending), whenShort: d.short + ' ' + b.time };
+      const rows = [[t.labels.when, d.long + ' ' + t.labels.at + ' ' + b.time], [t.labels.format, t.formats[b.format] || b.format]];
+      if (everyone.length > 2) rows.push([t.labels.who, joinNames(everyone)]);
+      if (b.note) rows.push([t.labels.note, b.note]);
+
+      const url = personalUrl_(to.name);   // opens the app with their name already chosen
+      const text = [tpl.lead(v), ''].concat(rows.map(function (r) { return r[0] + ': ' + r[1]; }),
+        ['', tpl.action, url, '', '—', t.footer]).join('\n');
+      const table = '<table style="border-collapse:collapse;width:100%;font-size:15px;margin-bottom:20px">' +
+        rows.map(function (r) {
+          return '<tr><td style="padding:8px 0;border-top:1px solid #EFE8EC;color:#6E686B;width:110px;vertical-align:top">' + esc_(r[0]) +
+            '</td><td style="padding:8px 0;border-top:1px solid #EFE8EC">' + esc_(r[1]) + '</td></tr>';
+        }).join('') + '</table>' +
+        '<p style="margin:0 0 18px;font-size:15px">' + esc_(tpl.action) + '</p>';
+      const html = mailFrame_(tpl.lead(v), table, url, tpl.button, t.footer);
+
+      const opts = { name: CONFIG.SENDER_NAME, htmlBody: html };
+      if (actorP.email) opts.replyTo = actorP.email;   // replies go to the student who acted, not to the app owner
+      MailApp.sendEmail(to.email, tpl.subject(v), text, opts);
+      sent.push(to.name);
+    } catch (e) {
+      console.error('Email to ' + name + ' not sent: ' + e);
     }
-    if (!to.email || MailApp.getRemainingDailyQuota() < 1) return '';
+  });
+  return sent;
+}
 
-    const first = function (n) { return String(n).split(/\s+/)[0]; };
-    const d = dateLabel_(b.date, t.locale);
-    const v = Object.assign({}, b, {
-      byFirst: first(b.by), withFirst: first(b.with), actorName: from.name || b.actor,
-      whenShort: d.short + ' ' + b.time,
-    });
-    const when = d.long + ' ' + t.labels.at + ' ' + b.time;
-    const format = t.formats[b.format] || b.format;
-    const url = appUrl_();
-
-    const rows = [[t.labels.when, when], [t.labels.format, format]];
-    if (b.note) rows.push([t.labels.note, b.note]);
-
-    const text = [tpl.lead(v), ''].concat(rows.map(function (r) { return r[0] + ': ' + r[1]; }),
-      ['', tpl.action, url, '', '—', t.footer]).join('\n');
-
-    const html =
-      '<div style="background:#F7F3F5;padding:28px 16px;font-family:Roboto,Helvetica,Arial,sans-serif;color:#3D3D3D">' +
-      '<div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #E5DCE1;border-radius:16px;padding:28px">' +
-      '<p style="margin:0 0 6px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:bold;color:#D86018">SE Practice Partners</p>' +
-      '<p style="margin:0 0 18px;font-family:Comfortaa,Trebuchet MS,Helvetica,sans-serif;font-size:20px;color:#6C1D45;line-height:1.3">' + esc_(tpl.lead(v)) + '</p>' +
-      '<table style="border-collapse:collapse;width:100%;font-size:15px;margin-bottom:20px">' +
-      rows.map(function (r) {
-        return '<tr><td style="padding:8px 0;border-top:1px solid #EFE8EC;color:#6E686B;width:90px;vertical-align:top">' + esc_(r[0]) +
-          '</td><td style="padding:8px 0;border-top:1px solid #EFE8EC">' + esc_(r[1]) + '</td></tr>';
-      }).join('') + '</table>' +
-      '<p style="margin:0 0 18px;font-size:15px">' + esc_(tpl.action) + '</p>' +
-      '<a href="' + esc_(url) + '" style="display:inline-block;background:#6C1D45;color:#fff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:12px">' + esc_(tpl.button) + '</a>' +
-      '</div><p style="max-width:520px;margin:16px auto 0;font-size:12px;color:#6E686B;text-align:center">' + esc_(t.footer) + '</p></div>';
-
-    const opts = { name: CONFIG.SENDER_NAME, htmlBody: html };
-    if (from.email) opts.replyTo = from.email;   // replies go to the other student, not to the app owner
-    MailApp.sendEmail(to.email, tpl.subject(v), text, opts);
-    return to.name;
-  } catch (e) {
-    console.error('Email not sent: ' + e);
-    return '';
-  }
+function mailFrame_(lead, inner, url, button, footer) {
+  return '<div style="background:#F7F3F5;padding:28px 16px;font-family:Roboto,Helvetica,Arial,sans-serif;color:#3D3D3D">' +
+    '<div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #E5DCE1;border-radius:16px;padding:28px">' +
+    '<p style="margin:0 0 6px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:bold;color:#D86018">SE Practice Partners</p>' +
+    '<p style="margin:0 0 18px;font-family:Comfortaa,Trebuchet MS,Helvetica,sans-serif;font-size:20px;color:#6C1D45;line-height:1.3">' + esc_(lead) + '</p>' +
+    inner +
+    '<a href="' + esc_(url) + '" style="display:inline-block;background:#6C1D45;color:#fff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:12px">' + esc_(button) + '</a>' +
+    '</div><p style="max-width:520px;margin:16px auto 0;font-size:12px;color:#6E686B;text-align:center">' + esc_(footer) + '</p></div>';
 }
 
 function dateLabel_(iso, locale) {
@@ -340,6 +460,8 @@ function bookingsSheet_() {
     sheet.getRange(1, 1, 1, BOOKING_HEADERS.length).setValues([BOOKING_HEADERS]).setFontWeight('bold');
     sheet.getRange('E:F').setNumberFormat('@');   // keep date and time as plain text
     sheet.setFrozenRows(1);
+  } else if (sheet.getLastColumn() < BOOKING_HEADERS.length) {   // sheets created before triads existed
+    sheet.getRange(1, 1, 1, BOOKING_HEADERS.length).setValues([BOOKING_HEADERS]).setFontWeight('bold');
   }
   return sheet;
 }

@@ -174,8 +174,18 @@
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
   .btn-wa { display: inline-flex; align-items: center; text-decoration: none; }
+  .wa-list { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+  .wa-list:empty { display: none; }
+  .status.partial { background: var(--accent-soft); color: var(--accent); }
   #d-msg { font-size: 14px; background: var(--surface-2); resize: none; }
   .dlg-actions { flex-wrap: wrap; }
+  .ph-preview { width: 132px; height: 132px; border-radius: 50%; margin: 4px auto 14px; background: var(--surface-2) center/cover no-repeat;
+                display: grid; place-items: center; color: var(--accent); font: 700 34px var(--serif); border: 3px solid var(--accent-soft); }
+  .ph-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ph-pick { display: inline-flex; justify-content: center; align-items: center; gap: 6px; cursor: pointer; }
+  .ph-note { margin: 0; padding: 12px 14px; border-radius: var(--r-md); background: var(--accent-soft); color: var(--accent); font-size: 14px; }
+  .add-photo { font-size: 12px; color: var(--ochre-ink); background: var(--ochre-soft); border: 0; border-radius: 99px; padding: 3px 9px; cursor: pointer; font-weight: 600; }
+  .avatar-btn { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; }
   .form-error { color: var(--danger); font-size: 13px; margin: 0; }
   .hint { font-size: 12px; color: var(--muted); margin: 0; }
 
@@ -264,6 +274,7 @@
     <h2 data-i18n="dlgTitle"></h2>
     <div class="field"><label for="b-by" data-i18n="yourName"></label><select id="b-by" required></select></div>
     <div class="field"><label for="b-with" data-i18n="with"></label><select id="b-with" required></select></div>
+    <div class="field"><label for="b-third" data-i18n="third"></label><select id="b-third"></select></div>
     <div class="two">
       <div class="field"><label for="b-date" data-i18n="date"></label><input type="date" id="b-date" required></div>
       <div class="field"><label for="b-time" data-i18n="time"></label><input type="time" id="b-time" step="900" required></div>
@@ -286,7 +297,35 @@
     <div class="dlg-actions">
       <button type="button" class="btn btn-ghost" id="d-close" data-i18n="close"></button>
       <button type="button" class="btn btn-ghost" id="d-copy" data-i18n="copy"></button>
-      <a class="btn btn-wa" id="d-wa" href="#" target="_blank" rel="noopener" data-i18n="tellWa"></a>
+    </div>
+    <div class="wa-list" id="d-wa"></div>
+  </div>
+</dialog>
+
+<dialog id="photo-dlg" aria-labelledby="ph-title">
+  <div class="dlg">
+    <p class="eyebrow" data-i18n="phEyebrow"></p>
+    <h2 id="ph-title" data-i18n="phTitle"></h2>
+    <p class="hint" data-i18n="phText"></p>
+    <!-- with the personal link: take or pick a photo -->
+    <div id="ph-upload">
+      <div class="ph-preview" id="ph-preview" aria-hidden="true"></div>
+      <div class="ph-buttons">
+        <label class="btn btn-ghost ph-pick"><span aria-hidden="true">📷</span> <span data-i18n="phCamera"></span>
+          <input type="file" accept="image/*" capture="user" id="ph-camera" hidden></label>
+        <label class="btn btn-ghost ph-pick"><span aria-hidden="true">🖼</span> <span data-i18n="phGallery"></span>
+          <input type="file" accept="image/*" id="ph-gallery" hidden></label>
+      </div>
+    </div>
+    <!-- without it: get it by email first -->
+    <div id="ph-link" hidden>
+      <p class="ph-note" id="ph-link-text"></p>
+    </div>
+    <p class="form-error" id="ph-error" role="alert"></p>
+    <div class="dlg-actions">
+      <button type="button" class="btn btn-ghost" id="ph-later" data-i18n="phLater"></button>
+      <button type="button" class="btn" id="ph-save" data-i18n="phSave" disabled></button>
+      <button type="button" class="btn" id="ph-send" data-i18n="phSendLink" hidden></button>
     </div>
   </div>
 </dialog>
@@ -318,26 +357,41 @@ const STR = {
     withWord: 'con', confirmed: 'Confermata', proposed: 'Proposta',
     confirm: 'Conferma', remindWa: 'Ricorda su WhatsApp', cancelSession: 'Annulla',
     dlgTitle: 'Proponi una sessione', yourName: 'Il tuo nome', with: 'Con', date: 'Data', time: 'Ora',
-    format: 'Formato', note: 'Nota (facoltativa)', notePh: 'es. triade con una terza persona, link della videochiamata…',
+    third: 'Terzo partecipante (facoltativo, per una triade)', nobody: 'Nessuno · sessione a due',
+    format: 'Formato', note: 'Nota (facoltativa)', notePh: 'es. link della videochiamata, chi fa il praticante…',
+    and: 'e', partial: (n, m) => `Confermata da ${n} su ${m}`,
     cancel: 'Annulla', propose: 'Proponi',
     bothFree: (d, s) => `Liberi entrambi: ${d} · ${s}`,
+    allFree: (d, s) => `Liberi tutti e tre: ${d} · ${s}`, noCommon: 'Nessuna fascia in comune a tutti e tre: concordate l\'orario.',
     usuallyFree: (n, d, s) => `${n} di solito è libero/a: ${d || '—'} · ${s || '—'}`,
     doneEyebrow: 'Sessione proposta', doneTitle: (n) => `Ora avvisa ${n}`,
-    doneWa: 'La sessione è nella lista. Manda questo messaggio, così può confermarla.',
-    doneEmailed: (n) => `Abbiamo mandato un'email a ${n}. Se vuoi, avvisalo/a anche su WhatsApp.`,
+    doneWa: 'La sessione è nella lista. Manda il messaggio, così possono confermarla.',
+    doneEmailed: (n) => `Abbiamo mandato un'email a ${n}. Se vuoi, avvisa anche su WhatsApp.`,
     emailedConfirm: (n) => `Sessione confermata. Abbiamo avvisato ${n} via email.`,
     emailedCancel: (n) => `Sessione annullata. Abbiamo avvisato ${n} via email.`,
-    doneNoPhone: (n) => `${n} non ha inserito il numero. Copia il messaggio e mandaglielo nel gruppo o in privato.`,
+    doneNoPhone: (n) => `${n}: nessun numero inserito. Copia il messaggio e mandalo nel gruppo o in privato.`,
+    waTo: (n) => `WhatsApp a ${n}`,
     message: 'Messaggio', close: 'Chiudi', copy: 'Copia messaggio', tellWa: 'Avvisa su WhatsApp',
     copied: 'Messaggio copiato.', chooseFirst: 'Prima scegli il tuo nome in alto.',
     confirmedToast: 'Sessione confermata.', cancelledToast: 'Sessione annullata.', cancelAsk: 'Annullare questa sessione?',
+    phEyebrow: 'Il tuo profilo', phTitle: 'Aggiungi la tua foto',
+    phText: 'Così i compagni ti riconoscono subito. Puoi scattarla ora o sceglierla dalla galleria.',
+    phCamera: 'Scatta una foto', phGallery: 'Dalla galleria', phLater: 'Più tardi', phSave: 'Salva la foto',
+    phSendLink: 'Inviami il link', addPhoto: '+ foto', phSaved: 'Foto salvata.',
+    phNeedLink: 'Per caricare la foto ti serve il tuo link personale: è il modo con cui l\'app sa che sei proprio tu. Te lo mandiamo via email.',
+    phNoEmail: 'Non troviamo un indirizzo email per te: aggiungilo con «Modifica i tuoi dati», poi torna qui.',
+    phLinkSent: 'Fatto: controlla la tua email e apri il link. L\'app ti riconoscerà e potrai caricare la foto.',
+    phBadFile: 'Non riesco a leggere questa immagine. Prova con un\'altra foto.',
     loading: 'Carico le disponibilità…', loadingSlow: 'Ancora qualche secondo: sto leggendo il foglio delle risposte…',
     loadError: 'Non è stato possibile caricare i dati:', pickName: 'Scegli il tuo nome.',
-    invite: (b, when, fmt, url) => `Ciao ${b.withFirst}! Ti ho proposto una sessione di pratica SE ${when} alle ${b.time} (${fmt}).` +
-      (b.note ? `\nNota: ${b.note}` : '') + `\nTi va bene? Puoi confermarla qui: ${url}\n${b.byFirst}`,
+    invite: (v) => `Ciao${v.to ? ' ' + v.to : ''}! ${v.plural ? 'Vi' : 'Ti'} ho proposto una sessione di pratica SE${v.others ? ' insieme a ' + v.others : ''} ${v.when} alle ${v.time} (${v.fmt}).` +
+      (v.note ? `\nNota: ${v.note}` : '') + `\n${v.plural ? 'Vi va bene? Potete' : 'Ti va bene? Puoi'} confermarla qui: ${v.url}\n${v.from}`,
     on: (d) => d,
     err: {
-      ERR_PICK_TWO: 'Scegli due persone dalla lista.', ERR_SELF: 'Non puoi prenotare una sessione con te stesso.',
+      ERR_PICK_TWO: 'Scegli le persone dalla lista.', ERR_SELF: 'Non puoi prenotare una sessione con te stesso.',
+      ERR_THIRD: 'Il terzo partecipante deve essere una persona diversa.',
+      ERR_NOT_YOU: 'Il tuo link personale non è valido: chiedine uno nuovo.', ERR_PHOTO: 'La foto non è valida o è troppo grande.',
+      ERR_NO_EMAIL: 'Nessuna email registrata per questo nome.',
       ERR_DATE: 'Scegli una data.', ERR_TIME: 'Scegli un orario.', ERR_PAST: 'La data è già passata.',
       ERR_CLASH: (a, b, t) => `${a} e ${b} hanno già una sessione alle ${t} quel giorno.`,
       ERR_ONLY_INVITED: 'Solo la persona invitata può confermare.',
@@ -374,25 +428,40 @@ const STR = {
     withWord: 'with', confirmed: 'Confirmed', proposed: 'Proposed',
     confirm: 'Confirm', remindWa: 'Remind on WhatsApp', cancelSession: 'Cancel',
     dlgTitle: 'Propose a session', yourName: 'Your name', with: 'With', date: 'Date', time: 'Time',
-    format: 'Format', note: 'Note (optional)', notePh: 'e.g. triad with a third person, video call link…',
+    third: 'Third person (optional, for a triad)', nobody: 'Nobody · session for two',
+    format: 'Format', note: 'Note (optional)', notePh: 'e.g. video call link, who is the practitioner…',
+    and: 'and', partial: (n, m) => `Confirmed by ${n} of ${m}`,
     cancel: 'Cancel', propose: 'Propose',
     bothFree: (d, s) => `Both free: ${d} · ${s}`,
+    allFree: (d, s) => `All three free: ${d} · ${s}`, noCommon: 'No time slot shared by all three: agree on a time.',
     usuallyFree: (n, d, s) => `${n} is usually free: ${d || '—'} · ${s || '—'}`,
     doneEyebrow: 'Session proposed', doneTitle: (n) => `Now let ${n} know`,
-    doneWa: 'The session is in the list. Send this message so they can confirm it.',
+    doneWa: 'The session is in the list. Send the message so they can confirm it.',
     doneEmailed: (n) => `We emailed ${n}. You can also let them know on WhatsApp.`,
+    waTo: (n) => `WhatsApp ${n}`,
     emailedConfirm: (n) => `Session confirmed. We emailed ${n}.`,
     emailedCancel: (n) => `Session cancelled. We emailed ${n}.`,
-    doneNoPhone: (n) => `${n} hasn't shared a phone number. Copy the message and send it to them in the group or in private.`,
+    doneNoPhone: (n) => `${n}: no phone number shared. Copy the message and send it in the group or in private.`,
     message: 'Message', close: 'Close', copy: 'Copy message', tellWa: 'Tell them on WhatsApp',
     copied: 'Message copied.', chooseFirst: 'Choose your name at the top first.',
     confirmedToast: 'Session confirmed.', cancelledToast: 'Session cancelled.', cancelAsk: 'Cancel this session?',
+    phEyebrow: 'Your profile', phTitle: 'Add your photo',
+    phText: 'So your classmates recognise you right away. Take one now or pick one from your gallery.',
+    phCamera: 'Take a photo', phGallery: 'From gallery', phLater: 'Later', phSave: 'Save photo',
+    phSendLink: 'Email me the link', addPhoto: '+ photo', phSaved: 'Photo saved.',
+    phNeedLink: 'To upload a photo you need your personal link: it is how the app knows it is really you. We will email it to you.',
+    phNoEmail: 'We can\'t find an email address for you: add it with «Edit your details», then come back.',
+    phLinkSent: 'Done: check your email and open the link. The app will recognise you and you can upload your photo.',
+    phBadFile: 'I can\'t read this image. Try another photo.',
     loading: 'Loading availability…', loadingSlow: 'A few more seconds: reading the responses sheet…',
     loadError: "Couldn't load the data:", pickName: 'Choose your name.',
-    invite: (b, when, fmt, url) => `Hi ${b.withFirst}! I've proposed an SE practice session with you ${when} at ${b.time} (${fmt}).` +
-      (b.note ? `\nNote: ${b.note}` : '') + `\nDoes it work for you? You can confirm it here: ${url}\n${b.byFirst}`,
+    invite: (v) => `Hi${v.to ? ' ' + v.to : ''}! I've proposed an SE practice session with ${v.plural ? 'you both' : 'you'}${v.others ? ' and ' + v.others : ''} ${v.when} at ${v.time} (${v.fmt}).` +
+      (v.note ? `\nNote: ${v.note}` : '') + `\nDoes it work for you? You can confirm it here: ${v.url}\n${v.from}`,
     err: {
-      ERR_PICK_TWO: 'Choose two people from the list.', ERR_SELF: "You can't book a session with yourself.",
+      ERR_PICK_TWO: 'Choose people from the list.', ERR_SELF: "You can't book a session with yourself.",
+      ERR_THIRD: 'The third person must be someone else.',
+      ERR_NOT_YOU: 'Your personal link is not valid: ask for a new one.', ERR_PHOTO: 'The photo is not valid or is too large.',
+      ERR_NO_EMAIL: 'No email registered for this name.',
       ERR_DATE: 'Choose a date.', ERR_TIME: 'Choose a time.', ERR_PAST: 'The date is in the past.',
       ERR_CLASH: (a, b, t) => `${a} and ${b} already have a session at ${t} that day.`,
       ERR_ONLY_INVITED: 'Only the invited person can confirm.',
@@ -491,15 +560,26 @@ function fmtDate(iso, opts) {
   return new Date(y, m-1, d).toLocaleDateString(T().locale, opts || { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
-function inviteText(b) {
+const invitees = (b) => [b.with].concat(b.third ? [b.third] : []);
+const participants = (b) => [b.by].concat(invitees(b));
+const person = (n) => state.people.find(x => key(x.name) === key(n));
+function joinNames(list) {
+  return list.length < 2 ? list.join('') : list.slice(0, -1).join(', ') + ' ' + T().and + ' ' + list[list.length - 1];
+}
+/* Message for one invitee (to), or a generic one for the group when to is empty */
+function inviteText(b, to) {
   const when = state.lang === 'it' ? fmtDate(b.date) : 'on ' + fmtDate(b.date);
-  return T().invite({ ...b, withFirst: first(b.with), byFirst: first(b.by) }, when, tv(b.format).toLowerCase(), state.appUrl || '');
+  const others = invitees(b).filter(n => !to || key(n) !== key(to)).map(first);
+  const inv = invitees(b);
+  return T().invite({ to: to ? first(to) : joinNames(inv.map(first)), plural: !to && inv.length > 1, others: to ? joinNames(others) : '', when, time: b.time,
+    fmt: tv(b.format).toLowerCase(), note: b.note, url: state.appUrl || '', from: first(b.by) });
 }
-function waInvite(b) {
-  const p = state.people.find(x => key(x.name) === key(b.with));
+function waInvite(b, to) {
+  const p = person(to);
   const base = p ? waLink(p.phone) : '';
-  return base ? base + '?text=' + encodeURIComponent(inviteText(b)) : '';
+  return base ? base + '?text=' + encodeURIComponent(inviteText(b, to)) : '';
 }
+const asList = (x) => Array.isArray(x) ? x : (x ? [x] : []);
 
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
@@ -607,10 +687,13 @@ function renderPeople() {
     const aria = t.availableAria(p.days.map(dayLabel).join(', '), p.slots.map(slotLabel).join(', '));
     return `<article class="card ${isMe ? 'is-me' : ''}">
       <div class="who">
-        ${p.photo
-          ? `<img class="avatar photo" src="${esc(p.photo)}" alt="" loading="lazy">`
-          : `<div class="avatar" style="background:${tone(p.name)}" aria-hidden="true">${esc(initials(p.name))}</div>`}
-        <div><h3>${esc(p.name)}${isMe ? ` <span class="badge">${esc(t.you)}</span>` : ''}</h3><p>${esc(p.region || '—')}</p></div>
+        ${(() => {
+          const av = p.photo
+            ? `<img class="avatar photo" src="${esc(p.photo)}" alt="" loading="lazy">`
+            : `<div class="avatar" style="background:${tone(p.name)}" aria-hidden="true">${esc(initials(p.name))}</div>`;
+          return isMe ? `<button type="button" class="avatar-btn" data-photo="1" aria-label="${esc(t.phTitle)}">${av}</button>` : av;
+        })()}
+        <div><h3>${esc(p.name)}${isMe ? ` <span class="badge">${esc(t.you)}</span>` : ''}${isMe && !p.photo ? ` <button type="button" class="add-photo" data-photo="1">${esc(t.addPhoto)}</button>` : ''}</h3><p>${esc(p.region || '—')}</p></div>
       </div>
       <div class="badges">${match}${badges}</div>
       <div class="matrix" role="img" aria-label="${esc(aria)}">${matrix}</div>
@@ -635,17 +718,22 @@ function renderSessions() {
     const title = fmtDate(d);
     return `<div class="day-group"><h3>${esc(title.charAt(0).toUpperCase() + title.slice(1))}</h3>` +
     groups[d].map(b => {
-      const mine = me && (key(b.by) === me || key(b.with) === me);
-      const canConfirm = me && key(b.with) === me && b.status === 'proposed';
-      const wa = me && key(b.by) === me && b.status === 'proposed' ? waInvite(b) : '';
+      const inv = invitees(b);
+      const done = b.confirmedBy || [];
+      const mine = me && participants(b).some(n => key(n) === me);
+      const canConfirm = me && b.status === 'proposed' && inv.some(n => key(n) === me) && !done.some(n => key(n) === me);
+      const reminders = me && key(b.by) === me && b.status === 'proposed'
+        ? inv.filter(n => !done.includes(n)).map(n => [n, waInvite(b, n)]).filter(x => x[1]) : [];
+      const statusLabel = b.status === 'confirmed' ? t.confirmed : done.length ? t.partial(done.length, inv.length) : t.proposed;
+      const statusClass = b.status === 'confirmed' ? 'confirmed' : done.length ? 'partial' : 'proposed';
       return `<div class="session">
         <span class="time">${esc(b.time)}</span>
-        <div class="pair"><strong>${esc(b.by)}</strong> ${esc(t.withWord)} <strong>${esc(b.with)}</strong>
+        <div class="pair"><strong>${esc(b.by)}</strong> ${esc(t.withWord)} ${inv.map(n => `<strong>${esc(n)}</strong>`).join(' ' + esc(t.and) + ' ')}
           <div class="meta">${esc(tv(b.format))}${b.note ? ' · ' + esc(b.note) : ''}</div></div>
-        <span class="status ${esc(b.status)}">${esc(b.status === 'confirmed' ? t.confirmed : t.proposed)}</span>
+        <span class="status ${statusClass}">${esc(statusLabel)}</span>
         ${mine ? `<div class="actions">
           ${canConfirm ? `<button class="btn btn-small" data-confirm="${esc(b.id)}">${esc(t.confirm)}</button>` : ''}
-          ${wa ? `<a class="btn btn-ghost btn-small btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${esc(t.remindWa)}</a>` : ''}
+          ${reminders.map(([n, wa]) => `<a class="btn btn-ghost btn-small btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${esc(inv.length > 1 ? t.waTo(first(n)) : t.remindWa)}</a>`).join('')}
           <button class="btn btn-ghost btn-small btn-danger" data-cancel="${esc(b.id)}">${esc(t.cancelSession)}</button></div>` : ''}
       </div>`;
     }).join('') + '</div>';
@@ -659,6 +747,7 @@ function openBooking(withName) {
   const opts = (sel) => state.people.map(p => `<option ${key(p.name)===key(sel)?'selected':''}>${esc(p.name)}</option>`).join('');
   $('b-by').innerHTML = `<option value="">${esc(T().choose)}</option>` + opts(state.me);
   $('b-with').innerHTML = opts(withName);
+  fillThird('');
   $('b-date').min = state.today; $('b-date').value = '';
   $('b-time').value = ''; $('b-note').value = ''; $('b-error').textContent = '';
   $('book').hidden = false; $('done').hidden = true;
@@ -666,27 +755,52 @@ function openBooking(withName) {
   $('dlg').showModal();
 }
 
+/* Third person: anyone except the two already chosen */
+function fillThird(keep) {
+  const by = key($('b-by').value), w = key($('b-with').value);
+  const cur = keep !== undefined ? keep : $('b-third').value;
+  $('b-third').innerHTML = `<option value="">${esc(T().nobody)}</option>` +
+    state.people.filter(p => key(p.name) !== by && key(p.name) !== w)
+      .map(p => `<option ${key(p.name) === key(cur) ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+}
+
 function updateHint() {
   const t = T();
-  const a = state.people.find(p => key(p.name) === key($('b-by').value));
-  const b = state.people.find(p => key(p.name) === key($('b-with').value));
+  const a = person($('b-by').value);
+  const b = person($('b-with').value);
+  const c = person($('b-third').value);
   if (!b) { $('b-hint').textContent = ''; return; }
-  const s = a ? shared(b, a) : null;
-  $('b-hint').textContent = s && s.score
-    ? t.bothFree(s.days.map(dayLabel).join(', '), s.slots.map(slotLabel).join(', '))
-    : t.usuallyFree(first(b.name), b.days.map(dayLabel).join(', '), b.slots.map(slotLabel).join(', '));
-  $('b-format').value = !isOnline(b) ? 'In person' : 'Online';
+  if (c && a) {
+    const days = DAYS.filter(d => [a, b, c].every(p => hasDay(p, d)));
+    const slots = SLOTS.filter(sl => [a, b, c].every(p => hasSlot(p, sl)));
+    $('b-hint').textContent = days.length && slots.length
+      ? t.allFree(days.map(dayLabel).join(', '), slots.map(slotLabel).join(', ')) : t.noCommon;
+  } else {
+    const s = a ? shared(b, a) : null;
+    $('b-hint').textContent = s && s.score
+      ? t.bothFree(s.days.map(dayLabel).join(', '), s.slots.map(slotLabel).join(', '))
+      : t.usuallyFree(first(b.name), b.days.map(dayLabel).join(', '), b.slots.map(slotLabel).join(', '));
+  }
+  const group = [b].concat(c ? [c] : []);
+  $('b-format').value = group.some(p => !isOnline(p)) ? 'In person' : 'Online';
 }
 
 function showDone(b, emailed) {
   const t = T();
-  const wa = waInvite(b);
-  $('d-title').textContent = t.doneTitle(first(b.with));
-  $('d-text').textContent = emailed ? t.doneEmailed(first(emailed)) : wa ? t.doneWa : t.doneNoPhone(b.with);
-  $('d-msg').value = inviteText(b);
-  $('d-wa').hidden = !wa; if (wa) $('d-wa').href = wa;
+  const inv = invitees(b);
+  const sent = asList(emailed);
+  const was = inv.map(n => [n, waInvite(b, n)]);
+  const noPhone = was.filter(x => !x[1]).map(x => first(x[0]));
+  $('d-title').textContent = t.doneTitle(joinNames(inv.map(first)));
+  $('d-text').textContent = [
+    sent.length ? t.doneEmailed(joinNames(sent.map(first))) : t.doneWa,
+    noPhone.length ? t.doneNoPhone(joinNames(noPhone)) : '',
+  ].filter(Boolean).join(' ');
+  $('d-msg').value = inviteText(b, inv.length === 1 ? inv[0] : '');
+  $('d-wa').innerHTML = was.filter(x => x[1]).map(([n, wa]) =>
+    `<a class="btn btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${esc(inv.length > 1 ? t.waTo(first(n)) : t.tellWa)}</a>`).join('');
   $('book').hidden = true; $('done').hidden = false;
-  (wa ? $('d-wa') : $('d-copy')).focus();
+  ($('d-wa').querySelector('a') || $('d-copy')).focus();
 }
 
 $('d-close').onclick = () => $('dlg').close();
@@ -697,12 +811,13 @@ $('d-copy').onclick = async () => {
   toast(T().copied);
 };
 
-$('b-by').onchange = updateHint;
-$('b-with').onchange = updateHint;
+$('b-by').onchange = () => { fillThird(); updateHint(); };
+$('b-with').onchange = () => { fillThird(); updateHint(); };
+$('b-third').onchange = updateHint;
 $('b-cancel').onclick = () => $('dlg').close();
 $('book').onsubmit = async (e) => {
   e.preventDefault();
-  const input = { by: $('b-by').value, with: $('b-with').value, date: $('b-date').value, time: $('b-time').value,
+  const input = { by: $('b-by').value, with: $('b-with').value, third: $('b-third').value, date: $('b-date').value, time: $('b-time').value,
                   format: $('b-format').value, note: $('b-note').value.trim(), lang: state.lang };
   if (!input.by) { $('b-error').textContent = T().pickName; return; }
   $('b-submit').disabled = true; $('b-error').textContent = '';
@@ -717,11 +832,32 @@ $('book').onsubmit = async (e) => {
 };
 
 /* ---------- Events ---------- */
-function setMe(name) { state.me = name; try { localStorage.setItem('se-me', name); } catch (e) {} render(); }
+function setMe(name) { state.me = name; try { localStorage.setItem('se-me', name); } catch (e) {} render(); maybeAskPhoto(); }
 function setLang(l) { state.lang = l; try { localStorage.setItem('se-lang', l); } catch (e) {} applyTexts(); render(); }
 function apply(data) {
   state.people = data.people; state.bookings = data.bookings; state.today = data.today;
-  state.formUrl = FORM_URL || data.formUrl || ''; state.appUrl = data.appUrl || ''; render();
+  state.formUrl = FORM_URL || data.formUrl || ''; state.appUrl = data.appUrl || '';
+  render();
+}
+/* Personal key from the email link (?me=<key>), kept on this device together with the name it belongs to */
+function myKey() {
+  try { const k = JSON.parse(localStorage.getItem('se-key') || 'null'); return k && key(k.name) === key(state.me) ? k.key : ''; }
+  catch (e) { return ''; }
+}
+async function recognise() {
+  const params = new URLSearchParams(location.search);
+  const k = params.get('me');
+  if (!k) return;
+  params.delete('me');
+  const q = params.toString();
+  try { history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash); } catch (e) {}
+  try {
+    const who = await call('whoAmI', k);
+    if (!who) return;
+    try { localStorage.setItem('se-key', JSON.stringify({ name: who.name, key: k })); } catch (e) {}
+    state.me = who.name; try { localStorage.setItem('se-me', who.name); } catch (e) {}
+    if (state.people.length) { render(); maybeAskPhoto(); }
+  } catch (e) { /* an invalid link simply leaves the app as it is */ }
 }
 function selectTab(tab) {
   $('tab-people').setAttribute('aria-selected', String(tab === 'people'));
@@ -745,7 +881,82 @@ $('tab-people').onclick = () => selectTab('people');
 $('tab-sessions').onclick = () => selectTab('sessions');
 document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => setLang(b.dataset.lang));
 
+/* ---------- Photo ---------- */
+const photo = { data: '' };
+
+/* Ask once in a while: when I'm chosen, have no photo and didn't say "later" in the last 3 days */
+function maybeAskPhoto() {
+  const p = meP();
+  if (!p || p.photo || $('photo-dlg').open || $('dlg').open) return;
+  var later = 0; try { later = Number(localStorage.getItem('se-photo-later') || 0); } catch (e) {}
+  if (Date.now() - later < 3 * 864e5) return;
+  openPhoto();
+}
+
+function openPhoto() {
+  const t = T(), p = meP();
+  if (!p) return toast(t.chooseFirst);
+  const k = myKey();
+  photo.data = '';
+  $('ph-error').textContent = '';
+  $('ph-upload').hidden = !k; $('ph-save').hidden = !k; $('ph-save').disabled = true;
+  $('ph-link').hidden = !!k; $('ph-send').hidden = !!k || !p.hasEmail;
+  $('ph-link-text').textContent = p.hasEmail ? t.phNeedLink : t.phNoEmail;
+  const pv = $('ph-preview');
+  pv.style.backgroundImage = p.photo ? `url("${p.photo}")` : '';
+  pv.textContent = p.photo ? '' : initials(p.name);
+  $('photo-dlg').showModal();
+}
+
+/* Square crop, 320 px, JPEG: small enough to store in the sheet */
+function prepareImage(file) {
+  return new Promise((ok, ko) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      const c = document.createElement('canvas'); c.width = c.height = 320;
+      c.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 320, 320);
+      URL.revokeObjectURL(url);
+      let q = 0.85, out = c.toDataURL('image/jpeg', q);
+      while (out.length > 46000 && q > 0.4) { q -= 0.1; out = c.toDataURL('image/jpeg', q); }
+      out.length > 46000 ? ko(new Error('ERR_PHOTO')) : ok(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); ko(new Error('bad')); };
+    img.src = url;
+  });
+}
+
+async function onPick(e) {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  $('ph-error').textContent = '';
+  try {
+    photo.data = await prepareImage(f);
+    $('ph-preview').style.backgroundImage = `url("${photo.data}")`; $('ph-preview').textContent = '';
+    $('ph-save').disabled = false;
+  } catch (err) { $('ph-error').textContent = err.message === 'bad' ? T().phBadFile : errMsg(err); }
+}
+$('ph-camera').onchange = onPick;
+$('ph-gallery').onchange = onPick;
+$('ph-later').onclick = () => { try { localStorage.setItem('se-photo-later', String(Date.now())); } catch (e) {} $('photo-dlg').close(); };
+$('ph-save').onclick = async () => {
+  if (!photo.data) return;
+  $('ph-save').disabled = true; $('ph-error').textContent = '';
+  try { apply(await call('uploadPhoto', myKey(), photo.data)); $('photo-dlg').close(); toast(T().phSaved); }
+  catch (err) { $('ph-error').textContent = errMsg(err); $('ph-save').disabled = false; }
+};
+$('ph-send').onclick = async () => {
+  $('ph-send').disabled = true; $('ph-error').textContent = '';
+  try { await call('sendMyLink', state.me, state.lang); $('ph-link-text').textContent = T().phLinkSent; $('ph-send').hidden = true;
+        try { localStorage.setItem('se-photo-later', String(Date.now())); } catch (e) {} }
+  catch (err) { $('ph-error').textContent = errMsg(err); }
+  finally { $('ph-send').disabled = false; }
+};
+
 document.addEventListener('click', async (e) => {
+  if (e.target.closest('[data-photo]')) return openPhoto();
   const el = e.target.closest('[data-book],[data-confirm],[data-cancel]');
   if (!el) return;
   if (el.dataset.book) return openBooking(el.dataset.book);
@@ -755,11 +966,11 @@ document.addEventListener('click', async (e) => {
   try {
     if (el.dataset.confirm) {
       const d = await call('confirmBooking', el.dataset.confirm, state.me, state.lang); apply(d);
-      toast(d.emailed ? t.emailedConfirm(first(d.emailed)) : t.confirmedToast);
+      toast(asList(d.emailed).length ? t.emailedConfirm(joinNames(asList(d.emailed).map(first))) : t.confirmedToast);
     }
     if (el.dataset.cancel && confirm(t.cancelAsk)) {
       const d = await call('cancelBooking', el.dataset.cancel, state.me, state.lang); apply(d);
-      toast(d.emailed ? t.emailedCancel(first(d.emailed)) : t.cancelledToast);
+      toast(asList(d.emailed).length ? t.emailedCancel(joinNames(asList(d.emailed).map(first))) : t.cancelledToast);
     }
   } catch (err) { toast(errMsg(err)); }
   finally { el.disabled = false; }
@@ -782,7 +993,8 @@ function renderLoading() {
 applyTexts();
 renderLoading();
 const slowTimer = setTimeout(() => { const el = $('loading-text'); if (el) el.textContent = T().loadingSlow; }, 4000);
-call('getData').then(apply).catch(err => {
+recognise();
+call('getData').then(data => { apply(data); maybeAskPhoto(); }).catch(err => {
   $('people').innerHTML = `<div class="error">${esc(T().loadError)} ${esc(errMsg(err))}</div>`;
   $('sessions').innerHTML = '';
 }).finally(() => { clearTimeout(slowTimer); $('people').removeAttribute('aria-busy'); });
@@ -794,22 +1006,29 @@ function demo(fn, ...args) {
     demo.db = {
       today: iso(0), formUrl: 'https://forms.gle/example', appUrl: 'https://se-practice.mnesti.it',
       people: [
-        { name: 'Anna Rossi', region: 'Milano', format: 'Both', days: ['Monday','Wednesday','Saturday'], slots: ['Evening (18–22)'], frequency: 'Weekly', setup: 'Triad (practitioner, client, observer)', languages: ['Italian','English'], phone: '333 1234567', notes: 'Would like to practice orienting and resourcing.' },
-        { name: 'Luca Bianchi', region: 'Roma', format: 'Online', days: ['Tuesday','Wednesday','Thursday'], slots: ['Lunchtime (12–14)','Evening (18–22)'], frequency: 'Every two weeks', setup: 'Dyad (2 people)', languages: ['Italian'], phone: '', notes: '' },
-        { name: 'Sara Conti', region: 'Bologna', format: 'In person', days: ['Saturday','Sunday'], slots: ['Morning (8–12)','Afternoon (14–18)'], frequency: 'Monthly', setup: 'No preference', languages: ['Italian'], phone: '', notes: '' },
+        { hasEmail: true, key: 'demoanna', name: 'Anna Rossi', region: 'Milano', format: 'Both', days: ['Monday','Wednesday','Saturday'], slots: ['Evening (18–22)'], frequency: 'Weekly', setup: 'Triad (practitioner, client, observer)', languages: ['Italian','English'], phone: '333 1234567', notes: 'Would like to practice orienting and resourcing.' },
+        { hasEmail: true, key: 'demoluca', name: 'Luca Bianchi', region: 'Roma', format: 'Online', days: ['Tuesday','Wednesday','Thursday'], slots: ['Lunchtime (12–14)','Evening (18–22)'], frequency: 'Every two weeks', setup: 'Dyad (2 people)', languages: ['Italian'], phone: '', notes: '' },
+        { hasEmail: true, key: 'demosara', name: 'Sara Conti', region: 'Bologna', format: 'Both', days: ['Wednesday','Saturday','Sunday'], slots: ['Morning (8–12)','Evening (18–22)'], frequency: 'Monthly', setup: 'No preference', languages: ['Italian'], phone: '', notes: '' },
       ],
-      bookings: [{ id: 'demo1', by: 'Anna Rossi', with: 'Luca Bianchi', date: iso(3), time: '19:00', format: 'Online', note: 'Zoom', status: 'proposed' }],
+      bookings: [{ id: 'demo1', by: 'Anna Rossi', with: 'Luca Bianchi', third: '', confirmedBy: [], date: iso(3), time: '19:00', format: 'Online', note: 'Zoom', status: 'proposed' }],
     };
   }
   const db = demo.db;
+  if (fn === 'whoAmI') { const p = db.people.find(x => x.key === args[0]); return p ? { name: p.name } : null; }
+  if (fn === 'sendMyLink') return { sent: true };
+  if (fn === 'uploadPhoto') { const p = db.people.find(x => x.key === args[0]); if (!p) throw new Error('ERR_NOT_YOU'); p.photo = args[1]; }
   if (fn === 'createBooking') {
     const b = args[0];
     if (db.bookings.some(x => x.date === b.date && x.time === b.time && [x.by, x.with].some(n => n === b.by || n === b.with)))
       throw new Error(['ERR_CLASH', b.by, b.with, b.time].join('|'));
-    db.bookings.push({ id: String(Date.now()), status: 'proposed', ...b });
-    return { ...JSON.parse(JSON.stringify(db)), emailed: b.with };
+    db.bookings.push({ id: String(Date.now()), status: 'proposed', confirmedBy: [], ...b });
+    return { ...JSON.parse(JSON.stringify(db)), emailed: [b.with, b.third].filter(Boolean) };
   }
-  if (fn === 'confirmBooking') db.bookings.find(b => b.id === args[0]).status = 'confirmed';
+  if (fn === 'confirmBooking') {
+    const b = db.bookings.find(x => x.id === args[0]);
+    if (!b.confirmedBy.includes(args[1])) b.confirmedBy.push(args[1]);
+    if ([b.with, b.third].filter(Boolean).every(n => b.confirmedBy.includes(n))) b.status = 'confirmed';
+  }
   if (fn === 'cancelBooking') db.bookings = db.bookings.filter(b => b.id !== args[0]);
   db.bookings.sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
   return JSON.parse(JSON.stringify(db));

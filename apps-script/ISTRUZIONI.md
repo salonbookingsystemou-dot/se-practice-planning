@@ -33,6 +33,18 @@ Aggiornando sempre lo **stesso** deployment (Nuova versione), l'URL non cambia.
 - Partono dal tuo account come «SE Practice Partners»; rispondendo si scrive all'altro studente.
 - Gli indirizzi non arrivano mai alla pagina. Per spegnerle: `SEND_EMAILS: false`. Limite Gmail: circa 100 al giorno.
 
+## Triadi
+Nel modulo di proposta si può scegliere un **terzo partecipante** (facoltativo). Ricevono l'email entrambi gli invitati;
+ognuno conferma per sé e la sessione diventa «Confermata» quando hanno confermato tutti e due.
+Nel foglio «Bookings» le colonne *Third* e *Confirmed by* si aggiungono da sole.
+
+## Link personale e foto
+- Ogni email dell'app contiene il **link personale** del destinatario (`…/?me=<codice>`): aprendolo, l'app lo riconosce
+  e preimposta «Io sono». Il codice è segreto, diverso per ognuno, e non compare mai nella pagina.
+- Chi non ha la foto vede una finestra per **scattarla o sceglierla dalla galleria**. Per caricarla serve il link personale:
+  chi non ce l'ha lo chiede con «Inviami il link» e lo riceve via email (al massimo uno ogni 10 minuti).
+- Le foto caricate dall'app (piccole, 320 px) stanno nel foglio «Photos» e hanno la precedenza su quelle del modulo.
+
 ## Prova senza dati veri
 Apri `index.html` dal computer, oppure `se-practice.mnesti.it/?demo`: usa dati di esempio e non scrive nulla.
 
