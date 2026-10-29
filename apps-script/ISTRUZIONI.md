@@ -45,6 +45,11 @@ Nel foglio «Bookings» le colonne *Third* e *Confirmed by* si aggiungono da sol
   chi non ce l'ha lo chiede con «Inviami il link» e lo riceve via email (al massimo uno ogni 10 minuti).
 - Le foto caricate dall'app (piccole, 320 px) stanno nel foglio «Photos» e hanno la precedenza su quelle del modulo.
 
+## «Ora sono libero»
+Nella propria card c'è uno switch con una durata (30 min, 1, 2 o 3 ore): finché è attivo la card è evidenziata in arancio,
+compare tra i «Liberi ora» e gli altri hanno il pulsante «Proponi adesso» (oggi, al prossimo quarto d'ora).
+Si spegne da solo allo scadere. La pagina aggiorna questo stato ogni minuto. I dati stanno nel foglio «Now».
+
 ## Prova senza dati veri
 Apri `index.html` dal computer, oppure `se-practice.mnesti.it/?demo`: usa dati di esempio e non scrive nulla.
 

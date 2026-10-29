@@ -184,6 +184,26 @@
   .ph-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .ph-pick { display: inline-flex; justify-content: center; align-items: center; gap: 6px; cursor: pointer; }
   .ph-note { margin: 0; padding: 12px 14px; border-radius: var(--r-md); background: var(--accent-soft); color: var(--accent); font-size: 14px; }
+  /* "Free right now" */
+  .card.is-free { border-color: var(--ochre); box-shadow: 0 0 0 1px var(--ochre) inset; }
+  .free-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #fff; background: var(--ochre);
+                padding: 3px 10px; border-radius: 99px; }
+  .free-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+  .free-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-md); background: var(--surface-2); }
+  .free-row.on { background: var(--ochre-soft); }
+  .switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; font-size: 14px; }
+  .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .switch .track { width: 42px; height: 24px; border-radius: 99px; background: var(--faint); position: relative; transition: background .15s; flex-shrink: 0; }
+  .switch .track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .switch input:checked + .track { background: var(--ochre); }
+  .switch input:checked + .track::after { transform: translateX(18px); }
+  .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .free-row select { width: auto; min-height: 34px; padding: 4px 8px; font-size: 13px; }
+  .free-row .until { font-size: 12px; color: var(--ochre-ink); margin-left: auto; }
+  .chip-now { display: inline-flex; align-items: center; gap: 6px; }
+  .chip-now .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ochre); }
+  @media (prefers-reduced-motion: reduce) { .free-badge .dot { animation: none; } .switch .track, .switch .track::after { transition: none; } }
   .add-photo { font-size: 12px; color: var(--ochre-ink); background: var(--ochre-soft); border: 0; border-radius: 99px; padding: 3px 9px; cursor: pointer; font-weight: 600; }
   .avatar-btn { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; }
   .form-error { color: var(--danger); font-size: 13px; margin: 0; }
@@ -253,6 +273,7 @@
       <button type="button" class="btn btn-ghost filter-toggle" id="f-toggle" aria-expanded="true" aria-controls="filters">
         <span data-i18n="filters"></span><span class="count" id="f-count" hidden></span><span class="chev" aria-hidden="true">▾</span>
       </button>
+      <button type="button" class="chip chip-now" id="f-now" aria-pressed="false"><span class="dot" aria-hidden="true"></span><span id="f-now-label"></span></button>
       <button type="button" class="btn-text" id="f-reset" hidden data-i18n="resetFilters"></button>
     </div>
     <div class="filters" id="filters">
@@ -388,6 +409,10 @@ const STR = {
     message: 'Messaggio', close: 'Chiudi', copy: 'Copia messaggio', tellWa: 'Avvisa su WhatsApp',
     copied: 'Messaggio copiato.', chooseFirst: 'Prima scegli il tuo nome in alto.',
     confirmedToast: 'Sessione confermata.', cancelledToast: 'Sessione annullata.', cancelAsk: 'Annullare questa sessione?',
+    freeNow: 'Ora sono libero/a', freeUntil: (t) => `Libero/a ora · fino alle ${t}`, freeShort: (t) => `fino alle ${t}`,
+    freeFor: { 30: '30 minuti', 60: '1 ora', 120: '2 ore', 180: '3 ore' }, freeChip: (n) => `Liberi ora${n ? ' · ' + n : ''}`,
+    proposeNow: 'Proponi adesso', freeOnToast: (t) => `Gli altri ti vedono libero/a fino alle ${t}.`, freeOffToast: 'Non risulti più libero/a.',
+    noFreeNow: 'In questo momento nessuno si è segnato come libero.',
     whoEyebrow: 'Benvenuto/a', whoTitle: 'Chi sei?', whoText: 'Scegli il tuo nome: l\'app ti mostrerà con chi hai fasce in comune e lo ricorderà su questo dispositivo.',
     whoMissing: 'Non trovi il tuo nome?', whoSkip: 'Solo guardare', whoGo: 'Continua',
     phEyebrow: 'Il tuo profilo', phTitle: 'Aggiungi la tua foto',
@@ -463,6 +488,10 @@ const STR = {
     message: 'Message', close: 'Close', copy: 'Copy message', tellWa: 'Tell them on WhatsApp',
     copied: 'Message copied.', chooseFirst: 'Choose your name at the top first.',
     confirmedToast: 'Session confirmed.', cancelledToast: 'Session cancelled.', cancelAsk: 'Cancel this session?',
+    freeNow: "I'm free now", freeUntil: (t) => `Free now · until ${t}`, freeShort: (t) => `until ${t}`,
+    freeFor: { 30: '30 minutes', 60: '1 hour', 120: '2 hours', 180: '3 hours' }, freeChip: (n) => `Free now${n ? ' · ' + n : ''}`,
+    proposeNow: 'Propose now', freeOnToast: (t) => `Others see you as free until ${t}.`, freeOffToast: 'You no longer show as free.',
+    noFreeNow: 'Nobody has marked themselves as free right now.',
     whoEyebrow: 'Welcome', whoTitle: 'Who are you?', whoText: 'Choose your name: the app will show who shares your free slots and remember it on this device.',
     whoMissing: 'Can\'t find your name?', whoSkip: 'Just browse', whoGo: 'Continue',
     phEyebrow: 'Your profile', phTitle: 'Add your photo',
@@ -564,6 +593,8 @@ const initials = (n) => n.split(/\s+/).filter(Boolean).slice(0,2).map(w => w[0].
 const first = (n) => String(n).split(/\s+/)[0];
 const tone = (n) => TONES[[...n].reduce((a,c) => a + c.charCodeAt(0), 0) % TONES.length];
 const meP = () => state.people.find(p => key(p.name) === key(state.me));
+const freeUntil = (p) => p && p.freeUntil && new Date(p.freeUntil).getTime() > Date.now() ? new Date(p.freeUntil) : null;
+const hhmm = (d) => d.toLocaleTimeString(T().locale, { hour: '2-digit', minute: '2-digit' });
 
 function shared(p, m) {
   if (!m || key(m.name) === key(p.name)) return null;
@@ -685,16 +716,19 @@ function renderPeople() {
     if (state.format === 'In person' && !isInPerson(p)) return false;
     if (state.day && !hasDay(p, state.day)) return false;
     if (state.slot && !hasSlot(p, state.slot)) return false;
+    if (state.nowOnly && !freeUntil(p)) return false;
     return true;
   });
   if (m) list = list.map(p => ({ p, s: shared(p, m) }))
     .sort((a,b) => (a.s ? 0 : -1) - (b.s ? 0 : -1) || (b.s?.score||0) - (a.s?.score||0) || a.p.name.localeCompare(b.p.name))
     .map(x => x.p);
+  list.sort((a, b) => (freeUntil(b) ? 1 : 0) - (freeUntil(a) ? 1 : 0));   // free right now first (stable: keeps the order above)
 
   $('c-people').textContent = state.people.length;
   const box = $('people');
   if (!state.people.length) { box.innerHTML = `<div class="empty">${esc(t.noPeople)}</div>`; return; }
-  if (!list.length) { box.innerHTML = `<div class="empty">${esc(t.noMatch)}</div>`; return; }
+  updateNowChip();
+  if (!list.length) { box.innerHTML = `<div class="empty">${esc(state.nowOnly ? t.noFreeNow : t.noMatch)}</div>`; return; }
 
   box.innerHTML = list.map(p => {
     const s = shared(p, m);
@@ -710,7 +744,13 @@ function renderPeople() {
     const match = s && s.score ? `<span class="badge match">${esc(t.shared(s.days.length, s.slots.map(slotLabel).join(', ')))}</span>` : '';
     const wa = waLink(p.phone);
     const aria = t.availableAria(p.days.map(dayLabel).join(', '), p.slots.map(slotLabel).join(', '));
-    return `<article class="card ${isMe ? 'is-me' : ''}">
+    const fu = freeUntil(p);
+    const freeRow = isMe ? `<div class="free-row ${fu ? 'on' : ''}">
+        <label class="switch"><input type="checkbox" data-free ${fu ? 'checked' : ''}><span class="track" aria-hidden="true"></span>${esc(t.freeNow)}</label>
+        <select data-free-mins aria-label="${esc(t.freeNow)}">${[30, 60, 120, 180].map(m => `<option value="${m}" ${m === (state.freeMins || 60) ? 'selected' : ''}>${esc(t.freeFor[m])}</option>`).join('')}</select>
+        ${fu ? `<span class="until">${esc(t.freeShort(hhmm(fu)))}</span>` : ''}
+      </div>` : '';
+    return `<article class="card ${isMe ? 'is-me' : ''} ${fu ? 'is-free' : ''}">
       <div class="who">
         ${(() => {
           const av = p.photo
@@ -720,12 +760,15 @@ function renderPeople() {
         })()}
         <div><h3>${esc(p.name)}${isMe ? ` <span class="badge">${esc(t.you)}</span>` : ''}${isMe && !p.photo ? ` <button type="button" class="add-photo" data-photo="1">${esc(t.addPhoto)}</button>` : ''}</h3><p>${esc(p.region || '—')}</p></div>
       </div>
+      ${fu && !isMe ? `<div><span class="free-badge"><span class="dot" aria-hidden="true"></span>${esc(t.freeUntil(hhmm(fu)))}</span></div>` : ''}
+      ${freeRow}
       <div class="badges">${match}${badges}</div>
       <div class="matrix" role="img" aria-label="${esc(aria)}">${matrix}</div>
       ${p.notes ? `<p class="notes">${esc(p.notes)}</p>` : ''}
       <div class="card-foot">
         ${wa ? `<a class="contact" href="${wa}" target="_blank" rel="noopener">WhatsApp →</a>` : '<span></span>'}
-        ${isMe ? '' : `<button class="btn btn-small" data-book="${esc(p.name)}">${esc(t.proposeSession)}</button>`}
+        ${isMe ? '' : fu ? `<button class="btn btn-small" data-book="${esc(p.name)}" data-now="1">${esc(t.proposeNow)}</button>`
+                         : `<button class="btn btn-small" data-book="${esc(p.name)}">${esc(t.proposeSession)}</button>`}
       </div>
     </article>`;
   }).join('');
@@ -768,13 +811,19 @@ function renderSessions() {
 function render() { renderMe(); renderPeople(); renderSessions(); }
 
 /* ---------- Booking dialog ---------- */
-function openBooking(withName) {
+function openBooking(withName, now) {
   const opts = (sel) => state.people.map(p => `<option ${key(p.name)===key(sel)?'selected':''}>${esc(p.name)}</option>`).join('');
   $('b-by').innerHTML = `<option value="">${esc(T().choose)}</option>` + opts(state.me);
   $('b-with').innerHTML = opts(withName);
   fillThird('');
   $('b-date').min = state.today; $('b-date').value = '';
   $('b-time').value = ''; $('b-note').value = ''; $('b-error').textContent = '';
+  if (now) {   // "Propose now": today, at the next quarter of an hour
+    const d = new Date(Date.now() + 10 * 60000); d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
+    const pad = (n) => String(n).padStart(2, '0');
+    $('b-date').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    $('b-time').value = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
   $('book').hidden = false; $('done').hidden = true;
   updateHint();
   $('dlg').showModal();
@@ -906,6 +955,51 @@ $('tab-people').onclick = () => selectTab('people');
 $('tab-sessions').onclick = () => selectTab('sessions');
 document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => setLang(b.dataset.lang));
 
+/* ---------- Free right now ---------- */
+function updateNowChip() {
+  const n = state.people.filter(p => freeUntil(p)).length;
+  $('f-now-label').textContent = T().freeChip(n);
+  $('f-now').setAttribute('aria-pressed', String(!!state.nowOnly));
+}
+$('f-now').onclick = () => { state.nowOnly = !state.nowOnly; renderPeople(); };
+
+function applyNow(now) {
+  state.people.forEach(p => { if (now[p.name]) p.freeUntil = now[p.name]; else delete p.freeUntil; });
+}
+async function setFree(on) {
+  const p = meP(); if (!p) return;
+  const t = T(), mins = on ? (state.freeMins || 60) : 0;
+  const before = p.freeUntil;
+  p.freeUntil = on ? new Date(Date.now() + mins * 60000).toISOString() : '';   // show it straight away
+  renderPeople();
+  try {
+    const res = await call('setFreeNow', p.name, mins);
+    applyNow(res.now); renderPeople();
+    toast(on ? t.freeOnToast(hhmm(new Date(meP().freeUntil))) : t.freeOffToast);
+  } catch (err) { p.freeUntil = before; renderPeople(); toast(errMsg(err)); }
+}
+document.addEventListener('change', (e) => {
+  if (e.target.matches('[data-free]')) setFree(e.target.checked);
+  if (e.target.matches('[data-free-mins]')) {
+    state.freeMins = Number(e.target.value);
+    try { localStorage.setItem('se-free-mins', String(state.freeMins)); } catch (err) {}
+    if (freeUntil(meP())) setFree(true);
+  }
+});
+try { state.freeMins = Number(localStorage.getItem('se-free-mins')) || 60; } catch (e) { state.freeMins = 60; }
+
+/* Every minute, while the page is visible: refresh who is free (a very small request) and drop expired switches */
+setInterval(async () => {
+  if (document.visibilityState !== 'visible' || !state.people.length) return;
+  try { applyNow((await call('getNow')).now); } catch (e) { /* keep what we have */ }
+  if (!document.activeElement || !document.activeElement.matches('[data-free-mins]')) renderPeople();
+}, 60000);
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && state.people.length) {
+    try { applyNow((await call('getNow')).now); renderPeople(); } catch (e) {}
+  }
+});
+
 /* ---------- First visit: who are you? ---------- */
 function maybeAskWho() {
   if (state.me || new URLSearchParams(location.search).has('me') || $('who-dlg').open || $('dlg').open) return;
@@ -1003,7 +1097,7 @@ document.addEventListener('click', async (e) => {
   if (e.target.closest('[data-photo]')) return openPhoto();
   const el = e.target.closest('[data-book],[data-confirm],[data-cancel]');
   if (!el) return;
-  if (el.dataset.book) return openBooking(el.dataset.book);
+  if (el.dataset.book) return openBooking(el.dataset.book, !!el.dataset.now);
   const t = T();
   if (!state.me) return toast(t.chooseFirst);
   el.disabled = true;
@@ -1050,7 +1144,7 @@ function demo(fn, ...args) {
     demo.db = {
       today: iso(0), formUrl: 'https://forms.gle/example', appUrl: 'https://se-practice.mnesti.it',
       people: [
-        { hasEmail: true, key: 'demoanna', name: 'Anna Rossi', region: 'Milano', format: 'Both', days: ['Monday','Wednesday','Saturday'], slots: ['Evening (18–22)'], frequency: 'Weekly', setup: 'Triad (practitioner, client, observer)', languages: ['Italian','English'], phone: '333 1234567', notes: 'Would like to practice orienting and resourcing.' },
+        { hasEmail: true, freeUntil: new Date(Date.now() + 75 * 60000).toISOString(), key: 'demoanna', name: 'Anna Rossi', region: 'Milano', format: 'Both', days: ['Monday','Wednesday','Saturday'], slots: ['Evening (18–22)'], frequency: 'Weekly', setup: 'Triad (practitioner, client, observer)', languages: ['Italian','English'], phone: '333 1234567', notes: 'Would like to practice orienting and resourcing.' },
         { hasEmail: true, key: 'demoluca', name: 'Luca Bianchi', region: 'Roma', format: 'Online', days: ['Tuesday','Wednesday','Thursday'], slots: ['Lunchtime (12–14)','Evening (18–22)'], frequency: 'Every two weeks', setup: 'Dyad (2 people)', languages: ['Italian'], phone: '', notes: '' },
         { hasEmail: true, key: 'demosara', name: 'Sara Conti', region: 'Bologna', format: 'Both', days: ['Wednesday','Saturday','Sunday'], slots: ['Morning (8–12)','Evening (18–22)'], frequency: 'Monthly', setup: 'No preference', languages: ['Italian'], phone: '', notes: '' },
       ],
@@ -1058,6 +1152,12 @@ function demo(fn, ...args) {
     };
   }
   const db = demo.db;
+  if (fn === 'getNow') return { now: Object.fromEntries(db.people.filter(p => p.freeUntil).map(p => [p.name, p.freeUntil])) };
+  if (fn === 'setFreeNow') {
+    const p = db.people.find(x => x.name === args[0]);
+    p.freeUntil = args[1] ? new Date(Date.now() + args[1] * 60000).toISOString() : '';
+    return { now: Object.fromEntries(db.people.filter(x => x.freeUntil).map(x => [x.name, x.freeUntil])) };
+  }
   if (fn === 'whoAmI') { const p = db.people.find(x => x.key === args[0]); return p ? { name: p.name } : null; }
   if (fn === 'sendMyLink') return { sent: true };
   if (fn === 'uploadPhoto') { const p = db.people.find(x => x.key === args[0]); if (!p) throw new Error('ERR_NOT_YOU'); p.photo = args[1]; }

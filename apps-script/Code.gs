@@ -10,7 +10,8 @@ const CONFIG = {
   APP_URL: 'https://se-practice.mnesti.it',                                // short link to the app (e.g. https://pratica.mnesti.it); empty = Apps Script URL
   RESPONSES_SHEET: '',      // leave empty to auto-detect the sheet with the form responses
   BOOKINGS_SHEET: 'Bookings',
-  PHOTOS_SHEET: 'Photos',     // photos uploaded from the app (small JPEGs, one row per person)
+  PHOTOS_SHEET: 'Photos',
+  NOW_SHEET: 'Now',           // "free right now" switches: one row per person with the time it ends     // photos uploaded from the app (small JPEGs, one row per person)
   TIMEZONE: 'Europe/Rome',
   MIN_GAP_MINUTES: 90,        // a person can't have two sessions closer than this
   SEND_EMAILS: true,          // email notifications for proposals, confirmations and cancellations
@@ -24,7 +25,7 @@ const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time',
    POST …/exec  body: {"fn": "...", "args": [...]}  (sent as text/plain to avoid CORS preflight) */
 
 const API = { getData: getData, createBooking: createBooking, confirmBooking: confirmBooking, cancelBooking: cancelBooking,
-              whoAmI: whoAmI, sendMyLink: sendMyLink, uploadPhoto: uploadPhoto };
+              whoAmI: whoAmI, sendMyLink: sendMyLink, uploadPhoto: uploadPhoto, getNow: getNow, setFreeNow: setFreeNow };
 
 function doGet(e) {
   const fn = e && e.parameter && e.parameter.fn;
@@ -58,6 +59,8 @@ function getData() {
     delete out.email;
     return out;
   });
+  const now = readNow_();
+  people.forEach(function (p) { if (now[p.name]) p.freeUntil = now[p.name]; });
   return { people: people, bookings: readBookings_(), today: today_(), formUrl: CONFIG.FORM_URL, appUrl: appUrl_() };
 }
 
@@ -229,6 +232,58 @@ function photosSheet_() {
   if (!sheet) {
     sheet = ss.insertSheet(CONFIG.PHOTOS_SHEET);
     sheet.getRange(1, 1, 1, 4).setValues([['Key', 'Name', 'Photo', 'Updated']]).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+/* ---------- "Free right now" ----------
+   A light switch for sessions organised on the spot. It switches itself off when its time is up. */
+
+const FREE_MINUTES = [30, 60, 120, 180];
+
+/* Polled by the page every minute: only names and end times, nothing else */
+function getNow() { return { now: readNow_(), serverTime: new Date().toISOString() }; }
+
+function setFreeNow(name, minutes) {
+  const p = readPeople_().find(function (x) { return key_(x.name) === key_(name); });
+  if (!p) throw new Error('ERR_PICK_TWO');
+  const mins = Number(minutes) || 0;
+  if (mins && FREE_MINUTES.indexOf(mins) === -1) throw new Error('ERR_BAD_REQUEST');
+  const until = mins ? new Date(Date.now() + mins * 60000) : '';
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = nowSheet_();
+    const values = sheet.getDataRange().getValues();
+    var row = -1;
+    for (var i = 1; i < values.length; i++) { if (key_(values[i][0]) === key_(p.name)) { row = i + 1; break; } }
+    if (row > 0) sheet.getRange(row, 2).setValue(until);
+    else if (until) sheet.appendRow([p.name, until]);
+    return getNow();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function readNow_() {
+  const out = {};
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.NOW_SHEET);
+  if (!sheet) return out;
+  const t = Date.now();
+  sheet.getDataRange().getValues().slice(1).forEach(function (r) {
+    const until = r[1] instanceof Date ? r[1] : (r[1] ? new Date(r[1]) : null);
+    if (r[0] && until && until.getTime() > t) out[String(r[0])] = until.toISOString();
+  });
+  return out;
+}
+
+function nowSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CONFIG.NOW_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.NOW_SHEET);
+    sheet.getRange(1, 1, 1, 2).setValues([['Name', 'Free until']]).setFontWeight('bold');
     sheet.setFrozenRows(1);
   }
   return sheet;
