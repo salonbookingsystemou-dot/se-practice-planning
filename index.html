@@ -115,6 +115,8 @@
   .who p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
   .badges { display: flex; flex-wrap: wrap; gap: 6px; }
   .badge { font-size: 12px; padding: 3px 9px; border-radius: 99px; background: var(--surface-2); color: var(--ink); }
+  .badge.tz { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .local-note { font-size: 12px; color: var(--muted); font-weight: 400; }
   .badge.match { background: var(--ochre-soft); color: var(--ochre-ink); font-weight: 600; }
 
   .matrix { display: grid; grid-template-columns: 74px repeat(7, 1fr); gap: 3px; font-size: 11px; color: var(--muted); }
@@ -306,6 +308,7 @@
       <div class="field"><label for="b-date" data-i18n="date"></label><input type="date" id="b-date" required></div>
       <div class="field"><label for="b-time" data-i18n="time"></label><input type="time" id="b-time" step="900" required></div>
     </div>
+    <p class="hint" id="b-tz-note"></p>
     <p class="hint" id="b-hint"></p>
     <div class="field"><label for="b-format" data-i18n="format"></label><select id="b-format"></select></div>
     <div class="field"><label for="b-note" data-i18n="note"></label>
@@ -425,6 +428,9 @@ const STR = {
     confirmedToast: 'Sessione confermata.', cancelledToast: 'Sessione annullata.', cancelAsk: 'Annullare questa sessione?',
     freeNow: 'Ora sono libero/a', freeUntil: (t) => `Libero/a ora · fino alle ${t}`, freeShort: (t) => `fino alle ${t}`,
     freeFor: { 30: '30 minuti', 60: '1 ora', 120: '2 ore', 180: '3 ore' }, freeChip: (n) => `Liberi ora${n ? ' · ' + n : ''}`,
+    inItaly: (t) => `${t} in Italia`, italyTime: 'ora italiana', yourTime: (t) => `da te alle ${t}`,
+    tzBadge: (c, h) => `🌍 ${c} · ${h} rispetto all'Italia`, slotsLocal: (n) => `Le fasce di ${n} sono nella sua ora locale.`,
+    localTimeHint: (c) => `Data e ora nel tuo fuso (${c}).`,
     proposeNow: 'Proponi adesso', signInToPropose: 'Accedi per proporre',
     nowNeedsLogin: 'Chi è libero adesso lo vedono solo i compagni che hanno fatto l\'accesso.', freeOnToast: (t) => `Gli altri ti vedono libero/a fino alle ${t}.`, freeOffToast: 'Non risulti più libero/a.',
     noFreeNow: 'In questo momento nessuno si è segnato come libero.',
@@ -514,6 +520,9 @@ const STR = {
     confirmedToast: 'Session confirmed.', cancelledToast: 'Session cancelled.', cancelAsk: 'Cancel this session?',
     freeNow: "I'm free now", freeUntil: (t) => `Free now · until ${t}`, freeShort: (t) => `until ${t}`,
     freeFor: { 30: '30 minutes', 60: '1 hour', 120: '2 hours', 180: '3 hours' }, freeChip: (n) => `Free now${n ? ' · ' + n : ''}`,
+    inItaly: (t) => `${t} in Italy`, italyTime: 'Italian time', yourTime: (t) => `${t} your time`,
+    tzBadge: (c, h) => `🌍 ${c} · ${h} vs Italy`, slotsLocal: (n) => `${n}'s time slots are in their local time.`,
+    localTimeHint: (c) => `Date and time in your time zone (${c}).`,
     proposeNow: 'Propose now', signInToPropose: 'Sign in to propose',
     nowNeedsLogin: 'Only signed-in classmates can see who is free right now.', freeOnToast: (t) => `Others see you as free until ${t}.`, freeOffToast: 'You no longer show as free.',
     noFreeNow: 'Nobody has marked themselves as free right now.',
@@ -632,6 +641,34 @@ const initials = (n) => n.split(/\s+/).filter(Boolean).slice(0,2).map(w => w[0].
 const first = (n) => String(n).split(/\s+/)[0];
 const tone = (n) => TONES[[...n].reduce((a,c) => a + c.charCodeAt(0), 0) % TONES.length];
 const meP = () => state.people.find(p => key(p.name) === key(state.me));
+/* ---------- Time zones: sessions are stored in Italian time, everyone sees their own ---------- */
+const REF_TZ = 'Europe/Rome';
+const MY_TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || REF_TZ; } catch (e) { return REF_TZ; } })();
+function partsIn(tz, d) {
+  const o = {};
+  new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .formatToParts(d).forEach(x => { o[x.type] = x.value; });
+  return { date: `${o.year}-${o.month}-${o.day}`, time: `${o.hour}:${o.minute}` };
+}
+function offsetMin(tz, d) {   // minutes ahead of UTC in tz at moment d
+  const p = partsIn(tz, d), [y, m, dd] = p.date.split('-').map(Number), [h, mi] = p.time.split(':').map(Number);
+  return Math.round((Date.UTC(y, m - 1, dd, h, mi) - Math.floor(d.getTime() / 60000) * 60000) / 60000);
+}
+function romeInstant(date, time) {   // "2026-11-04", "19:00" in Italy → the moment
+  const [y, m, d] = date.split('-').map(Number), [h, mi] = time.split(':').map(Number);
+  const guess = Date.UTC(y, m - 1, d, h, mi);
+  return new Date(guess - offsetMin(REF_TZ, new Date(guess - offsetMin(REF_TZ, new Date(guess)) * 60000)) * 60000);
+}
+const localOf = (b) => partsIn(MY_TZ, romeInstant(b.date, b.time));
+function localInputToRome(date, time) {   // what the person typed (their own time) → Italian date and time
+  const [y, m, d] = date.split('-').map(Number), [h, mi] = time.split(':').map(Number);
+  return partsIn(REF_TZ, new Date(y, m - 1, d, h, mi));
+}
+const zoneDiffH = (tz) => (offsetMin(tz, new Date()) - offsetMin(REF_TZ, new Date())) / 60;
+const iAmAbroad = () => zoneDiffH(MY_TZ) !== 0;
+const cityOf = (tz) => tz.split('/').pop().replace(/_/g, ' ');
+const signedH = (h) => (h > 0 ? '+' : h < 0 ? '−' : '±') + Math.abs(h).toString().replace('.5', ',5') + ' h';
+
 const freeUntil = (p) => p && p.freeUntil && new Date(p.freeUntil).getTime() > Date.now() ? new Date(p.freeUntil) : null;
 const hhmm = (d) => d.toLocaleTimeString(T().locale, { hour: '2-digit', minute: '2-digit' });
 
@@ -666,7 +703,11 @@ function inviteText(b, to) {
   const when = state.lang === 'it' ? fmtDate(b.date) : 'on ' + fmtDate(b.date);
   const others = invitees(b).filter(n => !to || key(n) !== key(to)).map(first);
   const inv = invitees(b);
-  return T().invite({ to: to ? first(to) : joinNames(inv.map(first)), plural: !to && inv.length > 1, others: to ? joinNames(others) : '', when, time: b.time,
+  const abroad = iAmAbroad() || participants(b).some(n => { const p = person(n); return p && p.tz && zoneDiffH(p.tz) !== 0; });
+  const rp = to && person(to);
+  const extra = rp && rp.tz && zoneDiffH(rp.tz) !== 0 ? ', ' + T().yourTime(partsIn(rp.tz, romeInstant(b.date, b.time)).time) : '';
+  return T().invite({ to: to ? first(to) : joinNames(inv.map(first)), plural: !to && inv.length > 1, others: to ? joinNames(others) : '', when,
+    time: b.time + (abroad ? ' (' + T().italyTime + extra + ')' : ''),
     fmt: tv(b.format).toLowerCase(), note: b.note, url: state.appUrl || '', from: first(b.by) });
 }
 function waInvite(b, to) {
@@ -804,7 +845,7 @@ function renderPeople() {
       </div>
       ${fu && !isMe ? `<div><span class="free-badge"><span class="dot" aria-hidden="true"></span>${esc(t.freeUntil(hhmm(fu)))}</span></div>` : ''}
       ${freeRow}
-      <div class="badges">${match}${badges}</div>
+      <div class="badges">${match}${p.tz && zoneDiffH(p.tz) !== 0 ? `<span class="badge tz">${esc(t.tzBadge(cityOf(p.tz), signedH(zoneDiffH(p.tz))))}</span>` : ''}${badges}</div>
       <div class="matrix" role="img" aria-label="${esc(aria)}">${matrix}</div>
       ${p.notes ? `<p class="notes">${esc(p.notes)}</p>` : ''}
       <div class="card-foot">
@@ -824,7 +865,7 @@ function renderSessions() {
   if (!state.bookings.length) { box.innerHTML = `<div class="empty">${esc(t.noSessions)}</div>`; return; }
   const me = key(state.me);
   const groups = {};
-  state.bookings.forEach(b => (groups[b.date] = groups[b.date] || []).push(b));
+  state.bookings.forEach(b => { const d = localOf(b).date; (groups[d] = groups[d] || []).push(b); });
   box.innerHTML = Object.keys(groups).map(d => {
     const title = fmtDate(d);
     return `<div class="day-group"><h3>${esc(title.charAt(0).toUpperCase() + title.slice(1))}</h3>` +
@@ -838,7 +879,7 @@ function renderSessions() {
       const statusLabel = b.status === 'confirmed' ? t.confirmed : done.length ? t.partial(done.length, inv.length) : t.proposed;
       const statusClass = b.status === 'confirmed' ? 'confirmed' : done.length ? 'partial' : 'proposed';
       return `<div class="session">
-        <span class="time">${esc(b.time)}</span>
+        <span class="time">${esc(localOf(b).time)}${iAmAbroad() ? `<br><span class="local-note">${esc(t.inItaly(b.time))}</span>` : ''}</span>
         <div class="pair"><strong>${esc(b.by)}</strong> ${esc(t.withWord)} ${inv.map(n => `<strong>${esc(n)}</strong>`).join(' ' + esc(t.and) + ' ')}
           <div class="meta">${esc(tv(b.format))}${b.note ? ' · ' + esc(b.note) : ''}${b.status === 'confirmed' && mine && b.format !== 'In person' ? ' · ' + esc(t.meetByEmail) : ''}</div></div>
         <span class="status ${statusClass}">${esc(statusLabel)}</span>
@@ -870,6 +911,7 @@ function openBooking(withName, now) {
   }
   $('book').hidden = false; $('done').hidden = true;
   updateHint();
+  $('b-tz-note').textContent = iAmAbroad() ? T().localTimeHint(cityOf(MY_TZ)) : '';
   $('dlg').showModal();
 }
 
@@ -899,6 +941,8 @@ function updateHint() {
       ? t.bothFree(s.days.map(dayLabel).join(', '), s.slots.map(slotLabel).join(', '))
       : t.usuallyFree(first(b.name), b.days.map(dayLabel).join(', '), b.slots.map(slotLabel).join(', '));
   }
+  const away = [b].concat(c ? [c] : []).filter(p => p.tz && zoneDiffH(p.tz) !== 0);
+  if (away.length) $('b-hint').textContent += ' ' + away.map(p => t.slotsLocal(first(p.name))).join(' ');
   const group = [b].concat(c ? [c] : []);
   $('b-format').value = group.some(p => !isOnline(p)) ? 'In person' : 'Online';
 }
@@ -937,6 +981,7 @@ $('book').onsubmit = async (e) => {
   const input = { key: myKey(), by: state.me, with: $('b-with').value, third: $('b-third').value, date: $('b-date').value, time: $('b-time').value,
                   format: $('b-format').value, note: $('b-note').value.trim(), lang: state.lang };
   if (!input.key) { $('dlg').close(); return openLogin(T().needLogin); }
+  if (input.date && input.time) Object.assign(input, localInputToRome(input.date, input.time));   // stored in Italian time
   $('b-submit').disabled = true; $('b-error').textContent = '';
   try {
     const data = await call('createBooking', input);
@@ -951,6 +996,7 @@ $('book').onsubmit = async (e) => {
 function setSession(sess, greet) {
   state.session = sess; state.me = sess ? sess.name : '';
   try { sess ? localStorage.setItem('se-session', JSON.stringify(sess)) : localStorage.removeItem('se-session'); localStorage.removeItem('se-key'); } catch (e) {}
+  state.tzSent = false;
   if (!sess) state.people.forEach(p => { delete p.freeUntil; });   // signed out: no more "free now" info
   render();
   if (sess) {
@@ -963,10 +1009,18 @@ function signOut() {
   try { google.accounts.id.disableAutoSelect(); } catch (e) {}
 }
 function setLang(l) { state.lang = l; try { localStorage.setItem('se-lang', l); } catch (e) {} applyTexts(); render(); }
+function sendMyZone() {
+  const p = meP();
+  if (!p || !myKey() || state.tzSent) return;
+  state.tzSent = true;
+  const mine = MY_TZ === REF_TZ ? '' : MY_TZ;
+  if ((p.tz || '') !== mine) call('setTimeZone', myKey(), MY_TZ).then(() => { p.tz = mine; renderPeople(); }).catch(() => {});
+}
 function apply(data) {
   state.people = data.people; state.bookings = data.bookings; state.today = data.today;
   state.formUrl = FORM_URL || data.formUrl || ''; state.appUrl = data.appUrl || '';
   render();
+  sendMyZone();
 }
 /* Personal key from the email link (?me=<key>), kept on this device together with the name it belongs to */
 function myKey() { return state.session && state.session.key || ''; }
@@ -1236,7 +1290,7 @@ function demo(fn, ...args) {
       people: [
         { hasEmail: true, freeUntil: new Date(Date.now() + 75 * 60000).toISOString(), key: 'demoanna', name: 'Anna Rossi', region: 'Milano', format: 'Both', days: ['Monday','Wednesday','Saturday'], slots: ['Evening (18–22)'], frequency: 'Weekly', setup: 'Triad (practitioner, client, observer)', languages: ['Italian','English'], phone: '333 1234567', notes: 'Would like to practice orienting and resourcing.' },
         { hasEmail: true, key: 'demoluca', name: 'Luca Bianchi', region: 'Roma', format: 'Online', days: ['Tuesday','Wednesday','Thursday'], slots: ['Lunchtime (12–14)','Evening (18–22)'], frequency: 'Every two weeks', setup: 'Dyad (2 people)', languages: ['Italian'], phone: '', notes: '' },
-        { hasEmail: true, key: 'demosara', name: 'Sara Conti', region: 'Bologna', format: 'Both', days: ['Wednesday','Saturday','Sunday'], slots: ['Morning (8–12)','Evening (18–22)'], frequency: 'Monthly', setup: 'No preference', languages: ['Italian'], phone: '', notes: '' },
+        { hasEmail: true, tz: 'America/New_York', key: 'demosara', name: 'Sara Conti', region: 'New York', format: 'Both', days: ['Wednesday','Saturday','Sunday'], slots: ['Morning (8–12)','Evening (18–22)'], frequency: 'Monthly', setup: 'No preference', languages: ['Italian'], phone: '', notes: '' },
       ],
       bookings: [{ id: 'demo1', by: 'Anna Rossi', with: 'Luca Bianchi', third: '', confirmedBy: [], date: iso(3), time: '19:00', format: 'Online', note: 'Zoom', status: 'proposed' }],
     };
@@ -1252,6 +1306,7 @@ function demo(fn, ...args) {
   }
   if (fn === 'whoAmI') { const p = db.people.find(x => x.key === args[0]); return p ? { name: p.name, key: p.key } : null; }
   if (fn === 'requestLink') return { sent: true };
+  if (fn === 'setTimeZone') return { tz: args[1] };
   if (fn === 'signIn') return { name: 'Luca Bianchi', key: 'demoluca' };
   if (fn === 'uploadPhoto') { const p = db.people.find(x => x.key === args[0]); if (!p) throw new Error('ERR_NOT_YOU'); p.photo = args[1]; }
   if (fn === 'createBooking') {

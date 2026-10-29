@@ -12,7 +12,8 @@ const CONFIG = {
   RESPONSES_SHEET: '',      // leave empty to auto-detect the sheet with the form responses
   BOOKINGS_SHEET: 'Bookings',
   PHOTOS_SHEET: 'Photos',
-  NOW_SHEET: 'Now',           // "free right now" switches: one row per person with the time it ends     // photos uploaded from the app (small JPEGs, one row per person)
+  NOW_SHEET: 'Now',
+  ZONES_SHEET: 'Zones',       // time zone of each person, taken from their browser when they sign in           // "free right now" switches: one row per person with the time it ends     // photos uploaded from the app (small JPEGs, one row per person)
   TIMEZONE: 'Europe/Rome',
   MIN_GAP_MINUTES: 90,        // a person can't have two sessions closer than this
   SEND_EMAILS: true,
@@ -30,7 +31,8 @@ const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time',
    POST …/exec  body: {"fn": "...", "args": [...]}  (sent as text/plain to avoid CORS preflight) */
 
 const API = { getData: getData, createBooking: createBooking, confirmBooking: confirmBooking, cancelBooking: cancelBooking,
-              whoAmI: whoAmI, signIn: signIn, requestLink: requestLink, uploadPhoto: uploadPhoto, getNow: getNow, setFreeNow: setFreeNow };
+              whoAmI: whoAmI, signIn: signIn, requestLink: requestLink, uploadPhoto: uploadPhoto, getNow: getNow, setFreeNow: setFreeNow,
+              setTimeZone: setTimeZone };
 
 function doGet(e) {
   const fn = e && e.parameter && e.parameter.fn;
@@ -66,7 +68,11 @@ function getData(k) {
     return out;
   });
   const now = k && personByKey_(k) ? readNow_() : {};
-  people.forEach(function (p) { if (now[p.name]) p.freeUntil = now[p.name]; });
+  const zones = readZones_();
+  people.forEach(function (p) {
+    if (now[p.name]) p.freeUntil = now[p.name];
+    if (zones[p.name] && zones[p.name] !== CONFIG.TIMEZONE) p.tz = zones[p.name];
+  });
   return { people: people, bookings: readBookings_(), today: today_(), formUrl: CONFIG.FORM_URL, appUrl: appUrl_() };
 }
 
@@ -145,6 +151,7 @@ function readBookings_() {
     .sort(function (a, b) { return (a.date + a.time).localeCompare(b.date + b.time); });
 }
 
+function all_(b) { return participants_(b); }
 function participants_(b) { return [b.by, b.with].concat(b.third ? [b.third] : []); }
 function invitees_(b) { return [b.with].concat(b.third ? [b.third] : []); }
 
@@ -325,6 +332,54 @@ function nowSheet_() {
   return sheet;
 }
 
+/* ---------- Time zones ----------
+   Sessions are always stored in Italian time (CONFIG.TIMEZONE); each person's zone is used only to show local times. */
+
+function setTimeZone(k, tz) {
+  const p = actor_(k);
+  tz = String(tz || '');
+  try { Utilities.formatDate(new Date(), tz, 'Z'); } catch (e) { throw new Error('ERR_BAD_REQUEST'); }
+  if (!/^[A-Za-z_]+(\/[A-Za-z0-9_+\-]+)+$/.test(tz) && tz !== 'UTC') throw new Error('ERR_BAD_REQUEST');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = zonesSheet_();
+    const values = sheet.getDataRange().getValues();
+    for (var i = 1; i < values.length; i++) {
+      if (key_(values[i][0]) === key_(p.name)) { sheet.getRange(i + 1, 2).setValue(tz); return { tz: tz }; }
+    }
+    sheet.appendRow([p.name, tz]);
+    return { tz: tz };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function readZones_() {
+  const out = {};
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.ZONES_SHEET);
+  if (!sheet) return out;
+  sheet.getDataRange().getValues().slice(1).forEach(function (r) { if (r[0] && r[1]) out[String(r[0])] = String(r[1]); });
+  return out;
+}
+
+function zonesSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CONFIG.ZONES_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.ZONES_SHEET);
+    sheet.getRange(1, 1, 1, 2).setValues([['Name', 'Time zone']]).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+/* Italian date + time of a session → the same moment written in another zone */
+function inZone_(date, time, tz) {
+  const instant = Utilities.parseDate(date + ' ' + time, CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm');
+  return { date: Utilities.formatDate(instant, tz, 'yyyy-MM-dd'), time: Utilities.formatDate(instant, tz, 'HH:mm') };
+}
+
 /* ---------- Actions ---------- */
 
 function createBooking(input) {
@@ -487,7 +542,8 @@ const MAIL = {
     cancelled: { subject: function (v) { return 'Sessione di pratica annullata · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' ha annullato questa sessione di pratica:'; },
       action: 'Se volete, potete proporne un\'altra dall\'app.', button: 'Apri l\'app' },
-    labels: { when: 'Quando', format: 'Formato', who: 'Partecipanti', note: 'Nota', at: 'alle', and: 'e', meet: 'Google Meet', app: 'App' },
+    labels: { when: 'Quando', format: 'Formato', who: 'Partecipanti', note: 'Nota', at: 'alle', and: 'e', meet: 'Google Meet', app: 'App',
+              italy: 'ora italiana', local: 'Da te' },
     formats: { 'Online': 'Online', 'In person': 'In presenza' },
     footer: 'Ricevi questa email perché hai inserito le tue disponibilità per la pratica SE tra compagni di corso.',
     locale: 'it',
@@ -505,7 +561,8 @@ const MAIL = {
     cancelled: { subject: function (v) { return 'Practice session cancelled · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' cancelled this practice session:'; },
       action: 'You can propose another one from the app.', button: 'Open the app' },
-    labels: { when: 'When', format: 'Format', who: 'People', note: 'Note', at: 'at', and: 'and', meet: 'Google Meet', app: 'App' },
+    labels: { when: 'When', format: 'Format', who: 'People', note: 'Note', at: 'at', and: 'and', meet: 'Google Meet', app: 'App',
+              italy: 'Italian time', local: 'Your time' },
     formats: { 'Online': 'Online', 'In person': 'In person' },
     footer: 'You receive this email because you shared your availability for SE peer practice.',
     locale: 'en',
@@ -520,6 +577,8 @@ function notify_(event, b, people, lang, actor, everyone) {
   const tpl = t[event];
   const find = function (n) { return people.find(function (p) { return key_(p.name) === key_(n); }) || { name: n }; };
   const first = function (n) { return String(n).split(/\s+/)[0]; };
+  const zones = readZones_();
+  const abroad = all_(b).some(function (n) { return zones[n] && zones[n] !== CONFIG.TIMEZONE; });
   const joinNames = function (list) {
     return list.length < 2 ? list.join('') : list.slice(0, -1).join(', ') + ' ' + t.labels.and + ' ' + list[list.length - 1];
   };
@@ -537,7 +596,13 @@ function notify_(event, b, people, lang, actor, everyone) {
       const pending = invitees_(b).filter(function (n) { return (b.confirmedBy || []).indexOf(n) === -1; });
       const v = { actor: actor, actorFirst: first(actor), others: joinNames(others), allConfirmed: !!b.allConfirmed,
                   pending: joinNames(pending), whenShort: d.short + ' ' + b.time, meet: b.meet || '' };
-      const rows = [[t.labels.when, d.long + ' ' + t.labels.at + ' ' + b.time], [t.labels.format, t.formats[b.format] || b.format]];
+      const rows = [[t.labels.when, d.long + ' ' + t.labels.at + ' ' + b.time + (abroad ? ' (' + t.labels.italy + ')' : '')]];
+      const tz = zones[name];
+      if (tz && tz !== CONFIG.TIMEZONE) {
+        const loc = inZone_(b.date, b.time, tz), ld = dateLabel_(loc.date, t.locale);
+        rows.push([t.labels.local, ld.long + ' ' + t.labels.at + ' ' + loc.time + ' · ' + tz.split('/').pop().replace(/_/g, ' ')]);
+      }
+      rows.push([t.labels.format, t.formats[b.format] || b.format]);
       if (all.length > 2 || event === 'scheduled') rows.push([t.labels.who, joinNames(all)]);
       if (event === 'scheduled' && b.meet) rows.push([t.labels.meet, b.meet]);
       if (b.note) rows.push([t.labels.note, b.note]);

@@ -81,6 +81,13 @@ Il link Meet arriva solo via email: non compare nella pagina.
 e pubblica una **Nuova versione**. Senza il servizio, la conferma funziona lo stesso ma senza link Meet.
 Per spegnere: `CREATE_MEET: false`.
 
+## Fusi orari (studenti all'estero)
+- Le sessioni sono salvate **in ora italiana**; ognuno le vede nel proprio fuso, letto dal browser, con «(19:00 in Italia)» accanto se diverso.
+- Chi propone dall'estero inserisce data e ora **locali**: l'app le converte. Il cambio dell'ora legale è gestito per ogni data.
+- Il fuso di ciascuno viene salvato al primo accesso nel foglio «Zones»; le card di chi è all'estero mostrano città e differenza
+  e ricordano che le sue fasce abituali sono in ora locale.
+- Email: ora italiana più l'ora locale per chi è all'estero. L'evento Calendar/Meet si adatta da solo al fuso di ognuno.
+
 ## Sicurezza del foglio e backup
 - Il foglio **non va condiviso** con gli studenti: l'app passa dal motore, che lavora con il tuo account.
   **Condividi → Accesso generale → Con restrizioni** e nessun editor oltre a te.
