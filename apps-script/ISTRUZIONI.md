@@ -1,52 +1,38 @@
-# SE Practice Partners · installazione (10 minuti)
+# SE Practice Partners · come funziona e come si aggiorna
 
-## 1. Incolla il codice
-1. Apri il **foglio delle risposte** del modulo.
-2. Menu **Estensioni → Apps Script**.
-3. Nel file `Codice.gs` cancella tutto e incolla il contenuto di `Code.gs`.
-4. Clicca **+ → HTML**, chiamalo esattamente `Index` e incolla il contenuto di `Index.html`.
-5. Salva (icona del dischetto).
+L'app ha due parti:
 
-## 2. Pubblica
-1. In alto a destra **Esegui il deployment → Nuovo deployment**.
-2. Tipo: **App web**.
-3. *Esegui come*: **Me**. *Chi ha accesso*: **Chiunque**.
-4. **Esegui il deployment** → autorizza con il tuo account Google (avviso «app non verificata»: *Avanzate → Vai al progetto*).
-5. Copia l'**URL dell'app web** e mandalo nel gruppo WhatsApp.
+| Parte | Dove | Cosa fa | Come si aggiorna |
+|---|---|---|---|
+| **Pagina** | `index.html` in questo repository → `se-practice.mnesti.it` (GitHub Pages) | Interfaccia: persone, filtri, prenotazioni, lingue | Modifica su GitHub: è online in 1–2 minuti, senza altro |
+| **Motore** | `apps-script/Code.gs` → Apps Script legato al foglio delle risposte | Legge il foglio, salva le prenotazioni, manda le email | Incolla in Apps Script → **Gestisci deployment → matita → Nuova versione** |
 
-Alla prima prenotazione lo script crea da solo la scheda **Bookings** nel foglio.
+## Installare il motore (una volta)
+1. Apri il **foglio delle risposte** → **Estensioni → Apps Script**.
+2. Incolla `Code.gs` (copialo dalla versione *Raw* su GitHub). Nel progetto basta questo file:
+   se c'è ancora un file `Index`, puoi eliminarlo.
+3. In `CONFIG` controlla `FORM_URL` (link del modulo) e `APP_URL` (`https://se-practice.mnesti.it`).
+4. Esegui una volta `testEmail` e autorizza (Fogli, Drive, Gmail).
+5. **Esegui il deployment** con queste impostazioni:
+   - *Esegui come*: **Me**
+   - *Chi ha accesso*: **Chiunque**
 
-## Come funziona
-- **People**: una scheda per persona con la griglia delle disponibilità (giorni × fasce). Filtri per formato, giorno e fascia.
-- **I am**: chi sceglie il proprio nome vede in ocra le fasce in comune con ogni persona e le schede ordinate per compatibilità.
-- **Propose a session**: data, ora, formato e nota. Impedisce due sessioni della stessa persona a meno di 90 minuti.
-- **Sessions**: elenco delle sessioni in programma. L'invitato può **confermare**, entrambi possono **annullare**.
+L'URL che termina con `/exec` è già scritto in `index.html` (costante `API_URL`). Se un giorno cambia, va aggiornato lì.
+Aggiornando sempre lo **stesso** deployment (Nuova versione), l'URL non cambia.
 
-## Foto (facoltativa)
-1. Nel Google Form aggiungi una domanda **Caricamento file** con titolo **Photo (optional)**:
-   solo immagini, massimo 1 file, 10 MB. Lasciala non obbligatoria.
-2. Dopo aver aggiornato il codice, in Apps Script esegui una volta la funzione `getData` (menu in alto → **Esegui**)
-   e autorizza l'accesso a Drive. Poi pubblica una **nuova versione** del deployment.
-
-Le foto restano private nel tuo Drive: l'app ne mostra solo una miniatura. Chi non carica una foto vede le iniziali.
-Il caricamento file nel modulo richiede che chi risponde abbia un account Google.
+## Modulo Google
+- Titoli delle domande con queste parole chiave: *Name, Region, Session format, Available days, time slots, How often, setup, Language, Phone, Notes, Photo*.
+- Email: attiva **Raccogli indirizzi email** nelle impostazioni del modulo (oppure una domanda con «email» nel titolo).
+- Foto facoltativa: domanda **Caricamento file** intitolata «Photo (optional)», solo immagini, 1 file.
 
 ## Notifiche email
-L'app avvisa via email:
-- l'invitato, quando riceve una proposta;
-- chi ha proposto, quando l'invitato conferma;
-- l'altra persona, quando una sessione viene annullata.
+- proposta → all'invitato · conferma → a chi ha proposto · annullamento → all'altra persona.
+- Partono dal tuo account come «SE Practice Partners»; rispondendo si scrive all'altro studente.
+- Gli indirizzi non arrivano mai alla pagina. Per spegnerle: `SEND_EMAILS: false`. Limite Gmail: circa 100 al giorno.
 
-Usa la colonna email del foglio (con «Raccogli indirizzi email» attivo nel modulo, oppure una domanda con «email» nel titolo).
-Le email partono dal tuo account con il nome «SE Practice Partners»; rispondendo, si scrive direttamente all'altro studente.
-Gli indirizzi non vengono mai mostrati nell'app.
-
-**Attivazione:** in Apps Script scegli la funzione `testEmail` → **Esegui** → autorizza l'invio di email
-(ti arriva un'email di prova). Poi pubblica una **nuova versione** del deployment.
-Per spegnere le notifiche: `SEND_EMAILS: false` in `Code.gs`. Limite di Gmail: circa 100 email al giorno.
+## Prova senza dati veri
+Apri `index.html` dal computer, oppure `se-practice.mnesti.it/?demo`: usa dati di esempio e non scrive nulla.
 
 ## Da sapere
-- Non c'è un accesso con password: chiunque abbia il link può prenotare a nome di altri. Tra 45 compagni di corso basta, ma non diffondere il link fuori dal gruppo.
-- Il numero di telefono compare solo se la persona l'ha inserito nel modulo (link diretto a WhatsApp).
-- Se cambi le domande del modulo, tieni nei titoli le parole chiave: *Name, Region, Session format, Available days, time slots, How often, setup, Language, Phone, Notes*.
-- Dopo una modifica al codice: **Esegui il deployment → Gestisci deployment → modifica → Nuova versione**, così l'URL resta lo stesso.
+- Non c'è accesso con password: chi ha il link può prenotare a nome di altri. Non diffondere il link fuori dal gruppo.
+- Il numero di telefono compare solo se la persona l'ha inserito (link diretto a WhatsApp).

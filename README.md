@@ -1,9 +1,11 @@
 # SE Practice Planning
 
-Web app per i compagni di corso di Somatic Experiencing: mostra le disponibilità raccolte con un Google Form
-e permette di proporre e confermare sessioni di pratica. Interfaccia in italiano e inglese.
+App per i compagni di corso di Somatic Experiencing: mostra le disponibilità raccolte con un Google Form
+e permette di proporre, confermare e annullare sessioni di pratica, con avvisi via email e WhatsApp.
+Interfaccia in italiano e inglese.
 
-- `apps-script/Code.gs` e `apps-script/Index.html`: da incollare nel progetto Apps Script legato al foglio delle risposte.
-- `apps-script/ISTRUZIONI.md`: installazione, foto, aggiornamenti.
+- `index.html`: la pagina, pubblicata su https://se-practice.mnesti.it con GitHub Pages.
+- `apps-script/Code.gs`: il motore su Google Apps Script (legge il foglio, salva le prenotazioni, manda le email).
+- `apps-script/ISTRUZIONI.md`: installazione e aggiornamenti.
 
-Aprendo `apps-script/Index.html` direttamente nel browser si vede un'anteprima con dati di esempio.
+Anteprima con dati di esempio: https://se-practice.mnesti.it/?demo

@@ -2,6 +2,7 @@
  * SE Practice Partners · Google Apps Script web app
  * Bound to the spreadsheet that collects the form responses.
  * Reads availability from the responses sheet, stores bookings in a "Bookings" sheet.
+ * Serves a small JSON API; the page itself is hosted on GitHub Pages (index.html in the repository).
  */
 
 const CONFIG = {
@@ -17,11 +18,32 @@ const CONFIG = {
 
 const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status'];
 
-function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle('SE Practice Partners')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+/* ---------- JSON API used by the page on GitHub Pages ----------
+   GET  …/exec?fn=getData                      → data
+   POST …/exec  body: {"fn": "...", "args": [...]}  (sent as text/plain to avoid CORS preflight) */
+
+const API = { getData: getData, createBooking: createBooking, confirmBooking: confirmBooking, cancelBooking: cancelBooking };
+
+function doGet(e) {
+  const fn = e && e.parameter && e.parameter.fn;
+  if (!fn) return json_({ ok: true, info: 'SE Practice Partners API' });
+  return run_(fn, []);
+}
+
+function doPost(e) {
+  var body = {};
+  try { body = JSON.parse(e.postData.contents || '{}'); } catch (err) { return json_({ error: 'ERR_BAD_REQUEST' }); }
+  return run_(body.fn, Array.isArray(body.args) ? body.args : []);
+}
+
+function run_(fn, args) {
+  if (!Object.prototype.hasOwnProperty.call(API, fn)) return json_({ error: 'ERR_BAD_REQUEST' });
+  try { return json_({ data: API[fn].apply(null, args) }); }
+  catch (err) { return json_({ error: String(err && err.message || err) }); }
+}
+
+function json_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
 /* ---------- Data for the page ---------- */
