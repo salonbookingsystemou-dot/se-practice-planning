@@ -54,12 +54,31 @@
   .tab[aria-selected=true] { color: var(--ink); border-color: var(--accent); font-weight: 600; }
   .count { display: inline-block; min-width: 22px; padding: 0 7px; margin-left: 6px; border-radius: 99px; background: var(--surface-2); font-size: 12px; }
 
-  .filters { display: grid; gap: 12px; margin-bottom: 24px; }
-  .filter-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .toolbar .search { flex: 1 1 260px; }
+  .filter-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
+  .filter-toggle .count { margin-left: 0; background: var(--accent); color: #fff; }
+  .filter-toggle .chev { transition: transform .15s; font-size: 12px; }
+  .filter-toggle[aria-expanded=true] .chev { transform: rotate(180deg); }
+  .btn-text { background: none; border: 0; color: var(--accent); font-weight: 600; cursor: pointer; padding: 8px 4px; }
+  .btn-text:hover { text-decoration: underline; }
+  .filters { display: grid; gap: 12px; margin-bottom: 24px; background: var(--surface); border: 1px solid var(--border);
+             border-radius: var(--r-lg); padding: 16px 18px; }
+  .filter-row { display: flex; gap: 8px; align-items: center; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .filter-label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); width: 78px; flex-shrink: 0; }
+  @media (min-width: 960px) {
+    /* desktop: the three groups side by side, label above the chips */
+    .filters { display: flex; flex-wrap: nowrap; gap: 0; padding: 14px 20px; }
+    .filter-row { display: block; padding: 0 18px; border-left: 1px solid var(--border-soft); }
+    .chips { gap: 6px; }
+    .filter-row:first-child { padding-left: 0; border-left: 0; }
+    .filter-label { display: block; width: auto; margin-bottom: 8px; }
+    .chip { padding: 4px 10px; font-size: 12.5px; }
+  }
+  @media (min-width: 1200px) { .chips { flex-wrap: nowrap; } }
   .chip { border: 1px solid var(--border); background: var(--surface); border-radius: 99px; padding: 6px 13px; cursor: pointer; font-size: 13px; }
   .chip[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
-  .search { max-width: 340px; }
 
   .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
@@ -134,7 +153,8 @@
   @media (max-width: 600px) {
     .side { width: 100%; }
     .wrap { padding: 20px 16px 48px; }
-    .filter-label { width: 100%; }
+    .filter-row { display: block; }
+    .filter-label { display: block; width: auto; margin-bottom: 8px; }
     .two { grid-template-columns: 1fr; }
   }
   @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
@@ -175,8 +195,14 @@
   </div>
 
   <section id="panel-people" role="tabpanel" aria-labelledby="tab-people">
-    <div class="filters">
+    <div class="toolbar">
       <input type="search" class="search" id="q" data-i18n-ph="search">
+      <button type="button" class="btn btn-ghost filter-toggle" id="f-toggle" aria-expanded="true" aria-controls="filters">
+        <span data-i18n="filters"></span><span class="count" id="f-count" hidden></span><span class="chev" aria-hidden="true">▾</span>
+      </button>
+      <button type="button" class="btn-text" id="f-reset" hidden data-i18n="resetFilters"></button>
+    </div>
+    <div class="filters" id="filters">
       <div class="filter-row" id="f-format"></div>
       <div class="filter-row" id="f-day"></div>
       <div class="filter-row" id="f-slot"></div>
@@ -238,7 +264,7 @@ const STR = {
     updateText: 'Sono cambiati i tuoi orari?', updateLink: 'Aggiorna le disponibilità',
     tabPeople: 'Persone', tabSessions: 'Sessioni',
     search: 'Cerca per nome o città',
-    fFormat: 'Formato', fDay: 'Giorno', fTime: 'Orario',
+    fFormat: 'Formato', fDay: 'Giorno', fTime: 'Orario', filters: 'Filtri', resetFilters: 'Azzera filtri',
     legendOn: 'Disponibile', legendShared: 'Libero anche tu',
     noPeople: 'Nessuno ha ancora compilato il modulo.', noMatch: 'Nessuno corrisponde a questi filtri.',
     you: 'tu', proposeSession: 'Proponi una sessione',
@@ -293,7 +319,7 @@ const STR = {
     updateText: 'Changed your schedule?', updateLink: 'Update your availability',
     tabPeople: 'People', tabSessions: 'Sessions',
     search: 'Search by name or city',
-    fFormat: 'Format', fDay: 'Day', fTime: 'Time',
+    fFormat: 'Format', fDay: 'Day', fTime: 'Time', filters: 'Filters', resetFilters: 'Clear filters',
     legendOn: 'Available', legendShared: 'Also free for you',
     noPeople: 'No one has filled in the form yet.', noMatch: 'No one matches these filters.',
     you: 'you', proposeSession: 'Propose a session',
@@ -446,14 +472,33 @@ function applyTexts() {
   });
   document.querySelectorAll('[data-lang]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === state.lang)));
   $('b-format').innerHTML = FORMATS.map(f => `<option value="${f}">${esc(tv(f))}</option>`).join('');
+  buildFilters();
+}
+
+function buildFilters() {
+  const t = T();
   buildChips('f-format', t.fFormat, FORMATS.map(f => [f, tv(f)]), 'format');
   buildChips('f-day', t.fDay, DAYS.map((d, i) => [d, t.days[i]]), 'day');
   buildChips('f-slot', t.fTime, SLOTS.map((s, i) => [s, t.slots[i]]), 'slot');
+  updateFilterUI();
+}
+
+/* Show / hide the filter panel; open by default on desktop, closed on phones; the choice is remembered */
+function setFiltersOpen(open) {
+  $('filters').hidden = !open;
+  $('f-toggle').setAttribute('aria-expanded', String(open));
+  try { localStorage.setItem('se-filters', open ? '1' : '0'); } catch (e) {}
+}
+function updateFilterUI() {
+  const n = ['format', 'day', 'slot'].filter(k => state[k]).length;
+  $('f-count').hidden = !n; $('f-count').textContent = n;
+  $('f-reset').hidden = !n && !state.q;
 }
 
 function buildChips(id, label, items, prop) {
   const row = $(id);
-  row.innerHTML = `<span class="filter-label">${esc(label)}</span>`;
+  row.innerHTML = `<span class="filter-label">${esc(label)}</span><div class="chips"></div>`;
+  const box = row.querySelector('.chips');
   items.forEach(([value, text]) => {
     const b = document.createElement('button');
     b.className = 'chip'; b.type = 'button'; b.textContent = text;
@@ -461,9 +506,10 @@ function buildChips(id, label, items, prop) {
     b.onclick = () => {
       state[prop] = state[prop] === value ? null : value;
       [...row.querySelectorAll('.chip')].forEach(c => c.setAttribute('aria-pressed', String(c === b && state[prop] === value)));
+      updateFilterUI();
       renderPeople();
     };
-    row.appendChild(b);
+    box.appendChild(b);
   });
 }
 
@@ -640,7 +686,16 @@ function selectTab(tab) {
 }
 
 $('me').onchange = (e) => setMe(e.target.value);
-$('q').oninput = (e) => { state.q = e.target.value; renderPeople(); };
+$('q').oninput = (e) => { state.q = e.target.value; updateFilterUI(); renderPeople(); };
+$('f-toggle').onclick = () => setFiltersOpen($('filters').hidden);
+$('f-reset').onclick = () => {
+  state.format = state.day = state.slot = null; state.q = ''; $('q').value = '';
+  buildFilters(); renderPeople();
+};
+(() => {
+  var saved = null; try { saved = localStorage.getItem('se-filters'); } catch (e) {}
+  setFiltersOpen(saved === null ? window.matchMedia('(min-width: 960px)').matches : saved === '1');
+})();
 $('tab-people').onclick = () => selectTab('people');
 $('tab-sessions').onclick = () => selectTab('sessions');
 document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => setLang(b.dataset.lang));
