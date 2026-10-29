@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SE Practice Partners</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F5F1E7; --surface: #FFFFFF; --surface-2: #EEE8D9; --surface-3: #E6DFCC;
+    --ink: #262419; --muted: #6B6553; --faint: #A39C88;
+    --border: #E2DBC9; --border-soft: #ECE6D7;
+    --accent: #3F5443; --accent-hover: #33463A; --accent-soft: #E3EADF; --moss: #4B6B57;
+    --ochre: #B08433; --ochre-soft: #F4EAD3; --danger: #A8412F;
+    --serif: 'Source Serif 4', Georgia, serif; --sans: 'Public Sans', system-ui, sans-serif;
+    --r-lg: 16px; --r-md: 12px; --r-sm: 8px;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 20px 64px; }
+
+  header.top { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end; justify-content: space-between; margin-bottom: 28px; }
+  .eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: var(--moss); margin: 0 0 6px; }
+  h1 { font: 400 clamp(28px, 4vw, 38px)/1.1 var(--serif); margin: 0; }
+  .lead { color: var(--muted); margin: 8px 0 0; max-width: 52ch; }
+  .whoami { display: flex; flex-direction: column; gap: 6px; min-width: 240px; }
+  .whoami label { font-size: 13px; color: var(--muted); }
+
+  select, input[type=text], input[type=date], input[type=time], input[type=search], textarea {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md);
+    padding: 10px 12px; width: 100%; min-height: 44px;
+  }
+  select:focus-visible, input:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  .cta { background: var(--accent); color: #fff; border-radius: 24px; padding: 28px 32px; margin-bottom: 28px;
+         display: flex; flex-wrap: wrap; gap: 20px 32px; align-items: center; justify-content: space-between; }
+  .cta h2 { font: 400 clamp(24px, 3vw, 30px)/1.15 var(--serif); margin: 0 0 6px; }
+  .cta p { margin: 0; opacity: .85; max-width: 48ch; }
+  .cta .btn-big { display: inline-flex; align-items: center; background: #fff; color: var(--accent); text-decoration: none;
+             padding: 16px 26px; font-size: 17px; border-radius: 99px; min-height: 56px; }
+  .cta .btn-big:hover { background: var(--accent-soft); }
+  .cta .btn-big:focus-visible { outline-color: #fff; }
+  .update { margin: -12px 0 20px; font-size: 14px; color: var(--muted); }
+  .update a { color: var(--accent); font-weight: 600; }
+  @media (max-width: 600px) { .cta { padding: 22px 20px; } .btn-big { width: 100%; justify-content: center; } }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .tab { background: none; border: 0; padding: 12px 16px; cursor: pointer; color: var(--muted); font-weight: 500; border-bottom: 3px solid transparent; margin-bottom: -1px; }
+  .tab[aria-selected=true] { color: var(--ink); border-color: var(--accent); font-weight: 600; }
+  .count { display: inline-block; min-width: 22px; padding: 0 7px; margin-left: 6px; border-radius: 99px; background: var(--surface-2); font-size: 12px; }
+
+  .filters { display: grid; gap: 12px; margin-bottom: 24px; }
+  .filter-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .filter-label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); width: 78px; flex-shrink: 0; }
+  .chip { border: 1px solid var(--border); background: var(--surface); border-radius: 99px; padding: 6px 13px; cursor: pointer; font-size: 13px; }
+  .chip[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .search { max-width: 340px; }
+
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .card.is-me { border-color: var(--accent); }
+  .who { display: flex; gap: 12px; align-items: center; }
+  .avatar { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font: 500 16px var(--serif); flex-shrink: 0; }
+  .avatar.photo { width: 56px; height: 56px; object-fit: cover; background: var(--surface-2); }
+  .who h3 { font: 400 20px/1.2 var(--serif); margin: 0; }
+  .who p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; }
+  .badge { font-size: 12px; padding: 3px 9px; border-radius: 99px; background: var(--surface-2); color: var(--ink); }
+  .badge.match { background: var(--ochre-soft); color: #7A5A1E; font-weight: 600; }
+
+  .matrix { display: grid; grid-template-columns: 74px repeat(7, 1fr); gap: 3px; font-size: 11px; color: var(--muted); }
+  .matrix span { text-align: center; }
+  .matrix .rowlab { text-align: left; }
+  .cell { height: 18px; border-radius: 4px; background: var(--border-soft); }
+  .cell.on { background: var(--moss); }
+  .cell.shared { background: var(--ochre); }
+
+  .notes { font-size: 13px; color: var(--muted); font-style: italic; margin: 0; }
+  .card-foot { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-top: auto; }
+  .contact { font-size: 13px; color: var(--accent); text-decoration: none; font-weight: 500; }
+
+  .btn { border: 0; border-radius: var(--r-md); background: var(--accent); color: #fff; padding: 10px 16px; font-weight: 600; cursor: pointer; min-height: 40px; }
+  .btn:hover { background: var(--accent-hover); }
+  .btn[disabled] { opacity: .55; cursor: default; }
+  .btn-ghost { background: transparent; color: var(--accent); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--accent-soft); }
+  .btn-small { padding: 6px 12px; min-height: 34px; font-size: 13px; }
+  .btn-danger { color: var(--danger); }
+
+  .day-group { margin-bottom: 24px; }
+  .day-group h3 { font: 400 20px var(--serif); margin: 0 0 10px; }
+  .session { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin-bottom: 8px; }
+  .session .time { font: 500 20px var(--serif); font-variant-numeric: tabular-nums; min-width: 60px; }
+  .session .pair { flex: 1; min-width: 200px; }
+  .session .pair strong { font-weight: 600; }
+  .session .meta { font-size: 13px; color: var(--muted); }
+  .status { font-size: 12px; padding: 3px 9px; border-radius: 99px; font-weight: 600; }
+  .status.proposed { background: var(--ochre-soft); color: #7A5A1E; }
+  .status.confirmed { background: var(--accent-soft); color: var(--accent); }
+  .session .actions { display: flex; gap: 6px; }
+
+  .empty, .loading, .error { text-align: center; padding: 48px 20px; color: var(--muted); background: var(--surface); border: 1px dashed var(--border); border-radius: var(--r-lg); }
+  .error { color: var(--danger); border-style: solid; }
+
+  dialog { border: 0; border-radius: 24px; padding: 0; width: min(460px, calc(100% - 32px)); box-shadow: 0 20px 60px rgba(38,36,25,.25); }
+  dialog::backdrop { background: rgba(38,36,25,.4); }
+  .dlg { padding: 26px 26px 22px; display: grid; gap: 14px; }
+  .dlg h2 { font: 400 24px var(--serif); margin: 0; }
+  .field { display: grid; gap: 6px; }
+  .field label { font-size: 13px; color: var(--muted); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+  .btn-wa { display: inline-flex; align-items: center; text-decoration: none; }
+  #d-msg { font-size: 14px; background: var(--surface-2); resize: none; }
+  .dlg-actions { flex-wrap: wrap; }
+  .form-error { color: var(--danger); font-size: 13px; margin: 0; }
+  .hint { font-size: 12px; color: var(--muted); margin: 0; }
+
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: var(--r-sm); font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin: -8px 0 18px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; }
+
+  .side { display: flex; flex-direction: column; gap: 12px; align-items: stretch; min-width: 240px; }
+  .lang { display: inline-flex; align-self: flex-end; border: 1px solid var(--border); border-radius: 99px; padding: 3px; background: var(--surface); }
+  .lang button { border: 0; background: none; border-radius: 99px; padding: 5px 12px; font-size: 12px; font-weight: 600; letter-spacing: .06em; cursor: pointer; color: var(--muted); }
+  .lang button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent); }
+  @media (max-width: 600px) {
+    .side { width: 100%; }
+    .wrap { padding: 20px 16px 48px; }
+    .filter-label { width: 100%; }
+    .two { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow" data-i18n="eyebrow"></p>
+      <h1 data-i18n="title"></h1>
+      <p class="lead" data-i18n="lead"></p>
+    </div>
+    <div class="side">
+      <div class="lang" role="group" aria-label="Language · Lingua">
+        <button type="button" data-lang="it" aria-pressed="false">IT</button>
+        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+      <div class="whoami">
+        <label for="me" data-i18n="iAm"></label>
+        <select id="me"></select>
+      </div>
+    </div>
+  </header>
+
+  <aside class="cta" id="cta" hidden>
+    <div>
+      <h2 data-i18n="ctaTitle"></h2>
+      <p data-i18n="ctaText"></p>
+    </div>
+    <a class="btn btn-big" id="cta-link" href="#" target="_blank" rel="noopener" data-i18n="ctaButton"></a>
+  </aside>
+  <p class="update" id="update" hidden><span data-i18n="updateText"></span> <a id="update-link" href="#" target="_blank" rel="noopener" data-i18n="updateLink"></a></p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-people" aria-selected="true" aria-controls="panel-people"><span data-i18n="tabPeople"></span><span class="count" id="c-people">0</span></button>
+    <button class="tab" role="tab" id="tab-sessions" aria-selected="false" aria-controls="panel-sessions"><span data-i18n="tabSessions"></span><span class="count" id="c-sessions">0</span></button>
+  </div>
+
+  <section id="panel-people" role="tabpanel" aria-labelledby="tab-people">
+    <div class="filters">
+      <input type="search" class="search" id="q" data-i18n-ph="search">
+      <div class="filter-row" id="f-format"></div>
+      <div class="filter-row" id="f-day"></div>
+      <div class="filter-row" id="f-slot"></div>
+    </div>
+    <div class="legend" id="legend" hidden><span><i style="background:var(--moss)"></i><span data-i18n="legendOn"></span></span><span><i style="background:var(--ochre)"></i><span data-i18n="legendShared"></span></span></div>
+    <div id="people" class="grid"><div class="loading">…</div></div>
+  </section>
+
+  <section id="panel-sessions" role="tabpanel" aria-labelledby="tab-sessions" hidden>
+    <div id="sessions"></div>
+  </section>
+</div>
+
+<dialog id="dlg">
+  <form class="dlg" id="book" method="dialog">
+    <h2 data-i18n="dlgTitle"></h2>
+    <div class="field"><label for="b-by" data-i18n="yourName"></label><select id="b-by" required></select></div>
+    <div class="field"><label for="b-with" data-i18n="with"></label><select id="b-with" required></select></div>
+    <div class="two">
+      <div class="field"><label for="b-date" data-i18n="date"></label><input type="date" id="b-date" required></div>
+      <div class="field"><label for="b-time" data-i18n="time"></label><input type="time" id="b-time" step="900" required></div>
+    </div>
+    <p class="hint" id="b-hint"></p>
+    <div class="field"><label for="b-format" data-i18n="format"></label><select id="b-format"></select></div>
+    <div class="field"><label for="b-note" data-i18n="note"></label>
+      <textarea id="b-note" rows="2" maxlength="300" data-i18n-ph="notePh"></textarea></div>
+    <p class="form-error" id="b-error" role="alert"></p>
+    <div class="dlg-actions">
+      <button type="button" class="btn btn-ghost" id="b-cancel" data-i18n="cancel"></button>
+      <button type="submit" class="btn" id="b-submit" data-i18n="propose"></button>
+    </div>
+  </form>
+  <div class="dlg" id="done" hidden>
+    <p class="eyebrow" data-i18n="doneEyebrow"></p>
+    <h2 id="d-title"></h2>
+    <p class="hint" id="d-text"></p>
+    <div class="field"><label for="d-msg" data-i18n="message"></label><textarea id="d-msg" rows="6" readonly></textarea></div>
+    <div class="dlg-actions">
+      <button type="button" class="btn btn-ghost" id="d-close" data-i18n="close"></button>
+      <button type="button" class="btn btn-ghost" id="d-copy" data-i18n="copy"></button>
+      <a class="btn btn-wa" id="d-wa" href="#" target="_blank" rel="noopener" data-i18n="tellWa"></a>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* ---------- Texts ---------- */
+const STR = {
+  it: {
+    eyebrow: 'Somatic Experiencing · pratica tra pari',
+    title: 'Compagni di pratica',
+    lead: 'Guarda chi è disponibile e quando, poi proponi una sessione di pratica. I dettagli li concordi con il compagno su WhatsApp.',
+    iAm: 'Io sono', chooseName: 'Scegli il tuo nome…', choose: 'Scegli…',
+    ctaTitle: 'Non sei ancora nella lista?',
+    ctaText: 'Inserisci le tue disponibilità in un minuto, così gli altri possono trovarti e proporti una sessione.',
+    ctaButton: 'Inserisci le disponibilità →',
+    updateText: 'Sono cambiati i tuoi orari?', updateLink: 'Aggiorna le disponibilità',
+    tabPeople: 'Persone', tabSessions: 'Sessioni',
+    search: 'Cerca per nome o città',
+    fFormat: 'Formato', fDay: 'Giorno', fTime: 'Orario',
+    legendOn: 'Disponibile', legendShared: 'Libero anche tu',
+    noPeople: 'Nessuno ha ancora compilato il modulo.', noMatch: 'Nessuno corrisponde a questi filtri.',
+    you: 'tu', proposeSession: 'Proponi una sessione',
+    shared: (n, slots) => `${n} ${n > 1 ? 'giorni' : 'giorno'} in comune · ${slots}`,
+    availableAria: (d, s) => `Disponibile: ${d || 'nessun giorno'} · ${s || 'nessun orario'}`,
+    available: 'disponibile',
+    noSessions: 'Nessuna sessione in programma. Scegli qualcuno in Persone e proponine una.',
+    withWord: 'con', confirmed: 'Confermata', proposed: 'Proposta',
+    confirm: 'Conferma', remindWa: 'Ricorda su WhatsApp', cancelSession: 'Annulla',
+    dlgTitle: 'Proponi una sessione', yourName: 'Il tuo nome', with: 'Con', date: 'Data', time: 'Ora',
+    format: 'Formato', note: 'Nota (facoltativa)', notePh: 'es. triade con una terza persona, link della videochiamata…',
+    cancel: 'Annulla', propose: 'Proponi',
+    bothFree: (d, s) => `Liberi entrambi: ${d} · ${s}`,
+    usuallyFree: (n, d, s) => `${n} di solito è libero/a: ${d || '—'} · ${s || '—'}`,
+    doneEyebrow: 'Sessione proposta', doneTitle: (n) => `Ora avvisa ${n}`,
+    doneWa: 'La sessione è nella lista. Manda questo messaggio, così può confermarla.',
+    doneNoPhone: (n) => `${n} non ha inserito il numero. Copia il messaggio e mandaglielo nel gruppo o in privato.`,
+    message: 'Messaggio', close: 'Chiudi', copy: 'Copia messaggio', tellWa: 'Avvisa su WhatsApp',
+    copied: 'Messaggio copiato.', chooseFirst: 'Prima scegli il tuo nome in alto.',
+    confirmedToast: 'Sessione confermata.', cancelledToast: 'Sessione annullata.', cancelAsk: 'Annullare questa sessione?',
+    loadError: 'Non è stato possibile caricare i dati:', pickName: 'Scegli il tuo nome.',
+    invite: (b, when, fmt, url) => `Ciao ${b.withFirst}! Ti ho proposto una sessione di pratica SE ${when} alle ${b.time} (${fmt}).` +
+      (b.note ? `\nNota: ${b.note}` : '') + `\nTi va bene? Puoi confermarla qui: ${url}\n${b.byFirst}`,
+    on: (d) => d,
+    err: {
+      ERR_PICK_TWO: 'Scegli due persone dalla lista.', ERR_SELF: 'Non puoi prenotare una sessione con te stesso.',
+      ERR_DATE: 'Scegli una data.', ERR_TIME: 'Scegli un orario.', ERR_PAST: 'La data è già passata.',
+      ERR_CLASH: (a, b, t) => `${a} e ${b} hanno già una sessione alle ${t} quel giorno.`,
+      ERR_ONLY_INVITED: 'Solo la persona invitata può confermare.',
+      ERR_ONLY_PAIR: 'Solo le due persone della sessione possono annullarla.', ERR_NOT_FOUND: 'Sessione non trovata.',
+    },
+    days: ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'], daysMini: ['Lu','Ma','Me','Gi','Ve','Sa','Do'],
+    daysLong: ['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'],
+    slots: ['Mattina','Pranzo','Pomeriggio','Sera'],
+    values: { 'Online': 'Online', 'In person': 'In presenza', 'Both': 'Online e in presenza',
+      'Weekly': 'Ogni settimana', 'Every two weeks': 'Ogni due settimane', 'Monthly': 'Ogni mese', 'Occasionally': 'Ogni tanto',
+      'Dyad': 'Diade', 'Triad': 'Triade (praticante, cliente, osservatore)', 'No preference': 'Diade o triade',
+      'Italian': 'Italiano', 'English': 'Inglese', 'Other': 'Altre lingue' },
+    locale: 'it-IT',
+  },
+  en: {
+    eyebrow: 'Somatic Experiencing · peer practice',
+    title: 'Practice partners',
+    lead: 'See who is available and when, then propose a practice session. Confirm details with your partner on WhatsApp.',
+    iAm: 'I am', chooseName: 'Choose your name…', choose: 'Choose…',
+    ctaTitle: 'Not on the list yet?',
+    ctaText: 'Add your availability in one minute, so others can find you and propose a session.',
+    ctaButton: 'Add your availability →',
+    updateText: 'Changed your schedule?', updateLink: 'Update your availability',
+    tabPeople: 'People', tabSessions: 'Sessions',
+    search: 'Search by name or city',
+    fFormat: 'Format', fDay: 'Day', fTime: 'Time',
+    legendOn: 'Available', legendShared: 'Also free for you',
+    noPeople: 'No one has filled in the form yet.', noMatch: 'No one matches these filters.',
+    you: 'you', proposeSession: 'Propose a session',
+    shared: (n, slots) => `${n} shared day${n > 1 ? 's' : ''} · ${slots}`,
+    availableAria: (d, s) => `Available ${d || 'no days'} · ${s || 'no times'}`,
+    available: 'available',
+    noSessions: 'No sessions planned yet. Pick someone in People and propose one.',
+    withWord: 'with', confirmed: 'Confirmed', proposed: 'Proposed',
+    confirm: 'Confirm', remindWa: 'Remind on WhatsApp', cancelSession: 'Cancel',
+    dlgTitle: 'Propose a session', yourName: 'Your name', with: 'With', date: 'Date', time: 'Time',
+    format: 'Format', note: 'Note (optional)', notePh: 'e.g. triad with a third person, video call link…',
+    cancel: 'Cancel', propose: 'Propose',
+    bothFree: (d, s) => `Both free: ${d} · ${s}`,
+    usuallyFree: (n, d, s) => `${n} is usually free: ${d || '—'} · ${s || '—'}`,
+    doneEyebrow: 'Session proposed', doneTitle: (n) => `Now let ${n} know`,
+    doneWa: 'The session is in the list. Send this message so they can confirm it.',
+    doneNoPhone: (n) => `${n} hasn't shared a phone number. Copy the message and send it to them in the group or in private.`,
+    message: 'Message', close: 'Close', copy: 'Copy message', tellWa: 'Tell them on WhatsApp',
+    copied: 'Message copied.', chooseFirst: 'Choose your name at the top first.',
+    confirmedToast: 'Session confirmed.', cancelledToast: 'Session cancelled.', cancelAsk: 'Cancel this session?',
+    loadError: "Couldn't load the data:", pickName: 'Choose your name.',
+    invite: (b, when, fmt, url) => `Hi ${b.withFirst}! I've proposed an SE practice session with you ${when} at ${b.time} (${fmt}).` +
+      (b.note ? `\nNote: ${b.note}` : '') + `\nDoes it work for you? You can confirm it here: ${url}\n${b.byFirst}`,
+    err: {
+      ERR_PICK_TWO: 'Choose two people from the list.', ERR_SELF: "You can't book a session with yourself.",
+      ERR_DATE: 'Choose a date.', ERR_TIME: 'Choose a time.', ERR_PAST: 'The date is in the past.',
+      ERR_CLASH: (a, b, t) => `${a} and ${b} already have a session at ${t} that day.`,
+      ERR_ONLY_INVITED: 'Only the invited person can confirm.',
+      ERR_ONLY_PAIR: 'Only the two people in the session can cancel it.', ERR_NOT_FOUND: 'Session not found.',
+    },
+    days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], daysMini: ['Mo','Tu','We','Th','Fr','Sa','Su'],
+    daysLong: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
+    slots: ['Morning','Lunch','Afternoon','Evening'],
+    values: {}, locale: 'en-GB',
+  },
+};
+
+/* Values as they arrive from the form (English), used for matching */
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const SLOTS = ['Morning','Lunchtime','Afternoon','Evening'];
+const FORMATS = ['Online','In person'];
+const TONES = ['#E3EADF','#F4EAD3','#E8E1F0','#DDE9EE','#F1E0DA','#E6E9D6'];
+
+const state = { people: [], bookings: [], today: '', me: '', q: '', format: null, day: null, slot: null, lang: 'it' };
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const key = (s) => String(s || '').trim().toLowerCase();
+const T = () => STR[state.lang];
+
+try {
+  state.me = localStorage.getItem('se-me') || '';
+  state.lang = localStorage.getItem('se-lang') || (/^it/i.test(navigator.language || '') ? 'it' : 'en');
+} catch (e) { state.lang = /^it/i.test(navigator.language || '') ? 'it' : 'en'; }
+if (!STR[state.lang]) state.lang = 'it';
+
+/* Translate a value coming from the form ("Triad (practitioner, client, observer)" → "Triade …") */
+function tv(v) {
+  const map = T().values;
+  const k = Object.keys(map).find(x => String(v).toLowerCase().startsWith(x.toLowerCase()));
+  return k ? map[k] : v;
+}
+const dayIdx = (v) => DAYS.findIndex(d => String(v).toLowerCase().startsWith(d.toLowerCase().slice(0,3)));
+const slotIdx = (v) => SLOTS.findIndex(s => String(v).toLowerCase().startsWith(s.toLowerCase()));
+const dayLabel = (v) => { const i = dayIdx(v); return i < 0 ? v : T().days[i]; };
+const slotLabel = (v) => { const i = slotIdx(v); return i < 0 ? v : T().slots[i]; };
+
+function errMsg(err) {
+  const m = String(err && err.message || err).match(/ERR_[A-Z_]+(\|[^\n]*)?/);
+  if (!m) return String(err && err.message || err);
+  const [code, ...args] = m[0].split('|');
+  const e = T().err[code];
+  return typeof e === 'function' ? e(...args) : (e || code);
+}
+
+/* ---------- Server calls (falls back to sample data outside Apps Script) ---------- */
+function call(fn, ...args) {
+  if (window.google && google.script && google.script.run) {
+    return new Promise((ok, ko) => google.script.run.withSuccessHandler(ok).withFailureHandler(ko)[fn](...args));
+  }
+  try { return Promise.resolve(demo(fn, ...args)); } catch (e) { return Promise.reject(e); }
+}
+
+/* ---------- Helpers ---------- */
+const hasDay = (p, d) => p.days.some(x => dayIdx(x) === DAYS.indexOf(d));
+const hasSlot = (p, s) => p.slots.some(x => slotIdx(x) === SLOTS.indexOf(s));
+const isOnline = (p) => /online|both/i.test(p.format);
+const isInPerson = (p) => /person|both/i.test(p.format);
+const initials = (n) => n.split(/\s+/).filter(Boolean).slice(0,2).map(w => w[0].toUpperCase()).join('');
+const first = (n) => String(n).split(/\s+/)[0];
+const tone = (n) => TONES[[...n].reduce((a,c) => a + c.charCodeAt(0), 0) % TONES.length];
+const meP = () => state.people.find(p => key(p.name) === key(state.me));
+
+function shared(p, m) {
+  if (!m || key(m.name) === key(p.name)) return null;
+  const days = DAYS.filter(d => hasDay(p,d) && hasDay(m,d));
+  const slots = SLOTS.filter(s => hasSlot(p,s) && hasSlot(m,s));
+  return { days, slots, score: days.length * slots.length };
+}
+
+function waLink(phone) {
+  let d = String(phone || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (d.startsWith('00')) d = d.slice(2);
+  if (d.length === 10 && d.startsWith('3')) d = '39' + d;
+  return 'https://wa.me/' + d;
+}
+
+function fmtDate(iso, opts) {
+  const [y,m,d] = iso.split('-').map(Number);
+  return new Date(y, m-1, d).toLocaleDateString(T().locale, opts || { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+function inviteText(b) {
+  const when = state.lang === 'it' ? fmtDate(b.date) : 'on ' + fmtDate(b.date);
+  return T().invite({ ...b, withFirst: first(b.with), byFirst: first(b.by) }, when, tv(b.format).toLowerCase(), state.appUrl || '');
+}
+function waInvite(b) {
+  const p = state.people.find(x => key(x.name) === key(b.with));
+  const base = p ? waLink(p.phone) : '';
+  return base ? base + '?text=' + encodeURIComponent(inviteText(b)) : '';
+}
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+/* ---------- Static texts and filters ---------- */
+function applyTexts() {
+  const t = T();
+  document.documentElement.lang = state.lang;
+  document.title = t.title;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t[el.dataset.i18n]; });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+    el.placeholder = t[el.dataset.i18nPh]; el.setAttribute('aria-label', t[el.dataset.i18nPh]);
+  });
+  document.querySelectorAll('[data-lang]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === state.lang)));
+  $('b-format').innerHTML = FORMATS.map(f => `<option value="${f}">${esc(tv(f))}</option>`).join('');
+  buildChips('f-format', t.fFormat, FORMATS.map(f => [f, tv(f)]), 'format');
+  buildChips('f-day', t.fDay, DAYS.map((d, i) => [d, t.days[i]]), 'day');
+  buildChips('f-slot', t.fTime, SLOTS.map((s, i) => [s, t.slots[i]]), 'slot');
+}
+
+function buildChips(id, label, items, prop) {
+  const row = $(id);
+  row.innerHTML = `<span class="filter-label">${esc(label)}</span>`;
+  items.forEach(([value, text]) => {
+    const b = document.createElement('button');
+    b.className = 'chip'; b.type = 'button'; b.textContent = text;
+    b.setAttribute('aria-pressed', String(state[prop] === value));
+    b.onclick = () => {
+      state[prop] = state[prop] === value ? null : value;
+      [...row.querySelectorAll('.chip')].forEach(c => c.setAttribute('aria-pressed', String(c === b && state[prop] === value)));
+      renderPeople();
+    };
+    row.appendChild(b);
+  });
+}
+
+/* ---------- Render ---------- */
+function renderMe() {
+  const t = T();
+  $('me').innerHTML = `<option value="">${esc(t.chooseName)}</option>` +
+    state.people.map(p => `<option ${key(p.name)===key(state.me)?'selected':''}>${esc(p.name)}</option>`).join('');
+  $('legend').hidden = !meP();
+  const url = state.formUrl;
+  $('cta').hidden = !url || !!meP();
+  $('update').hidden = !url || !meP();
+  if (url) { $('cta-link').href = url; $('update-link').href = url; }
+}
+
+function renderPeople() {
+  const t = T();
+  const m = meP();
+  const q = key(state.q);
+  let list = state.people.filter(p => {
+    if (q && !key(p.name + ' ' + p.region).includes(q)) return false;
+    if (state.format === 'Online' && !isOnline(p)) return false;
+    if (state.format === 'In person' && !isInPerson(p)) return false;
+    if (state.day && !hasDay(p, state.day)) return false;
+    if (state.slot && !hasSlot(p, state.slot)) return false;
+    return true;
+  });
+  if (m) list = list.map(p => ({ p, s: shared(p, m) }))
+    .sort((a,b) => (a.s ? 0 : -1) - (b.s ? 0 : -1) || (b.s?.score||0) - (a.s?.score||0) || a.p.name.localeCompare(b.p.name))
+    .map(x => x.p);
+
+  $('c-people').textContent = state.people.length;
+  const box = $('people');
+  if (!state.people.length) { box.innerHTML = `<div class="empty">${esc(t.noPeople)}</div>`; return; }
+  if (!list.length) { box.innerHTML = `<div class="empty">${esc(t.noMatch)}</div>`; return; }
+
+  box.innerHTML = list.map(p => {
+    const s = shared(p, m);
+    const isMe = m && key(m.name) === key(p.name);
+    const matrix = '<span></span>' + t.daysMini.map(d => `<span>${d}</span>`).join('') +
+      SLOTS.map((sl, si) => `<span class="rowlab">${t.slots[si]}</span>` + DAYS.map((d, di) => {
+        const on = hasDay(p,d) && hasSlot(p,sl);
+        const both = on && s && hasDay(m,d) && hasSlot(m,sl);
+        return `<span class="cell ${both ? 'shared' : on ? 'on' : ''}" title="${t.daysLong[di]} · ${t.slots[si]}${on ? ' · ' + t.available : ''}"></span>`;
+      }).join('')).join('');
+    const badges = [p.format, p.setup, p.frequency, ...(p.languages || [])].filter(Boolean)
+      .map(b => `<span class="badge">${esc(tv(b))}</span>`).join('');
+    const match = s && s.score ? `<span class="badge match">${esc(t.shared(s.days.length, s.slots.map(slotLabel).join(', ')))}</span>` : '';
+    const wa = waLink(p.phone);
+    const aria = t.availableAria(p.days.map(dayLabel).join(', '), p.slots.map(slotLabel).join(', '));
+    return `<article class="card ${isMe ? 'is-me' : ''}">
+      <div class="who">
+        ${p.photo
+          ? `<img class="avatar photo" src="${esc(p.photo)}" alt="" loading="lazy">`
+          : `<div class="avatar" style="background:${tone(p.name)}" aria-hidden="true">${esc(initials(p.name))}</div>`}
+        <div><h3>${esc(p.name)}${isMe ? ` <span class="badge">${esc(t.you)}</span>` : ''}</h3><p>${esc(p.region || '—')}</p></div>
+      </div>
+      <div class="badges">${match}${badges}</div>
+      <div class="matrix" role="img" aria-label="${esc(aria)}">${matrix}</div>
+      ${p.notes ? `<p class="notes">${esc(p.notes)}</p>` : ''}
+      <div class="card-foot">
+        ${wa ? `<a class="contact" href="${wa}" target="_blank" rel="noopener">WhatsApp →</a>` : '<span></span>'}
+        ${isMe ? '' : `<button class="btn btn-small" data-book="${esc(p.name)}">${esc(t.proposeSession)}</button>`}
+      </div>
+    </article>`;
+  }).join('');
+}
+
+function renderSessions() {
+  const t = T();
+  $('c-sessions').textContent = state.bookings.length;
+  const box = $('sessions');
+  if (!state.bookings.length) { box.innerHTML = `<div class="empty">${esc(t.noSessions)}</div>`; return; }
+  const me = key(state.me);
+  const groups = {};
+  state.bookings.forEach(b => (groups[b.date] = groups[b.date] || []).push(b));
+  box.innerHTML = Object.keys(groups).map(d => {
+    const title = fmtDate(d);
+    return `<div class="day-group"><h3>${esc(title.charAt(0).toUpperCase() + title.slice(1))}</h3>` +
+    groups[d].map(b => {
+      const mine = me && (key(b.by) === me || key(b.with) === me);
+      const canConfirm = me && key(b.with) === me && b.status === 'proposed';
+      const wa = me && key(b.by) === me && b.status === 'proposed' ? waInvite(b) : '';
+      return `<div class="session">
+        <span class="time">${esc(b.time)}</span>
+        <div class="pair"><strong>${esc(b.by)}</strong> ${esc(t.withWord)} <strong>${esc(b.with)}</strong>
+          <div class="meta">${esc(tv(b.format))}${b.note ? ' · ' + esc(b.note) : ''}</div></div>
+        <span class="status ${esc(b.status)}">${esc(b.status === 'confirmed' ? t.confirmed : t.proposed)}</span>
+        ${mine ? `<div class="actions">
+          ${canConfirm ? `<button class="btn btn-small" data-confirm="${esc(b.id)}">${esc(t.confirm)}</button>` : ''}
+          ${wa ? `<a class="btn btn-ghost btn-small btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${esc(t.remindWa)}</a>` : ''}
+          <button class="btn btn-ghost btn-small btn-danger" data-cancel="${esc(b.id)}">${esc(t.cancelSession)}</button></div>` : ''}
+      </div>`;
+    }).join('') + '</div>';
+  }).join('');
+}
+
+function render() { renderMe(); renderPeople(); renderSessions(); }
+
+/* ---------- Booking dialog ---------- */
+function openBooking(withName) {
+  const opts = (sel) => state.people.map(p => `<option ${key(p.name)===key(sel)?'selected':''}>${esc(p.name)}</option>`).join('');
+  $('b-by').innerHTML = `<option value="">${esc(T().choose)}</option>` + opts(state.me);
+  $('b-with').innerHTML = opts(withName);
+  $('b-date').min = state.today; $('b-date').value = '';
+  $('b-time').value = ''; $('b-note').value = ''; $('b-error').textContent = '';
+  $('book').hidden = false; $('done').hidden = true;
+  updateHint();
+  $('dlg').showModal();
+}
+
+function updateHint() {
+  const t = T();
+  const a = state.people.find(p => key(p.name) === key($('b-by').value));
+  const b = state.people.find(p => key(p.name) === key($('b-with').value));
+  if (!b) { $('b-hint').textContent = ''; return; }
+  const s = a ? shared(b, a) : null;
+  $('b-hint').textContent = s && s.score
+    ? t.bothFree(s.days.map(dayLabel).join(', '), s.slots.map(slotLabel).join(', '))
+    : t.usuallyFree(first(b.name), b.days.map(dayLabel).join(', '), b.slots.map(slotLabel).join(', '));
+  $('b-format').value = !isOnline(b) ? 'In person' : 'Online';
+}
+
+function showDone(b) {
+  const t = T();
+  const wa = waInvite(b);
+  $('d-title').textContent = t.doneTitle(first(b.with));
+  $('d-text').textContent = wa ? t.doneWa : t.doneNoPhone(b.with);
+  $('d-msg').value = inviteText(b);
+  $('d-wa').hidden = !wa; if (wa) $('d-wa').href = wa;
+  $('book').hidden = true; $('done').hidden = false;
+  (wa ? $('d-wa') : $('d-copy')).focus();
+}
+
+$('d-close').onclick = () => $('dlg').close();
+$('d-copy').onclick = async () => {
+  const el = $('d-msg');
+  try { await navigator.clipboard.writeText(el.value); }
+  catch (e) { el.select(); document.execCommand('copy'); }
+  toast(T().copied);
+};
+
+$('b-by').onchange = updateHint;
+$('b-with').onchange = updateHint;
+$('b-cancel').onclick = () => $('dlg').close();
+$('book').onsubmit = async (e) => {
+  e.preventDefault();
+  const input = { by: $('b-by').value, with: $('b-with').value, date: $('b-date').value, time: $('b-time').value,
+                  format: $('b-format').value, note: $('b-note').value.trim() };
+  if (!input.by) { $('b-error').textContent = T().pickName; return; }
+  $('b-submit').disabled = true; $('b-error').textContent = '';
+  try {
+    apply(await call('createBooking', input));
+    if (!state.me) setMe(input.by);
+    showDone(input);
+  } catch (err) {
+    $('b-error').textContent = errMsg(err);
+  } finally { $('b-submit').disabled = false; }
+};
+
+/* ---------- Events ---------- */
+function setMe(name) { state.me = name; try { localStorage.setItem('se-me', name); } catch (e) {} render(); }
+function setLang(l) { state.lang = l; try { localStorage.setItem('se-lang', l); } catch (e) {} applyTexts(); render(); }
+function apply(data) {
+  state.people = data.people; state.bookings = data.bookings; state.today = data.today;
+  state.formUrl = data.formUrl || ''; state.appUrl = data.appUrl || ''; render();
+}
+function selectTab(tab) {
+  $('tab-people').setAttribute('aria-selected', String(tab === 'people'));
+  $('tab-sessions').setAttribute('aria-selected', String(tab === 'sessions'));
+  $('panel-people').hidden = tab !== 'people';
+  $('panel-sessions').hidden = tab !== 'sessions';
+}
+
+$('me').onchange = (e) => setMe(e.target.value);
+$('q').oninput = (e) => { state.q = e.target.value; renderPeople(); };
+$('tab-people').onclick = () => selectTab('people');
+$('tab-sessions').onclick = () => selectTab('sessions');
+document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => setLang(b.dataset.lang));
+
+document.addEventListener('click', async (e) => {
+  const el = e.target.closest('[data-book],[data-confirm],[data-cancel]');
+  if (!el) return;
+  if (el.dataset.book) return openBooking(el.dataset.book);
+  const t = T();
+  if (!state.me) return toast(t.chooseFirst);
+  el.disabled = true;
+  try {
+    if (el.dataset.confirm) { apply(await call('confirmBooking', el.dataset.confirm, state.me)); toast(t.confirmedToast); }
+    if (el.dataset.cancel && confirm(t.cancelAsk)) { apply(await call('cancelBooking', el.dataset.cancel, state.me)); toast(t.cancelledToast); }
+  } catch (err) { toast(errMsg(err)); }
+  finally { el.disabled = false; }
+});
+
+applyTexts();
+call('getData').then(apply).catch(err => {
+  $('people').innerHTML = `<div class="error">${esc(T().loadError)} ${esc(errMsg(err))}</div>`;
+});
+
+/* ---------- Sample data, used only when the page is opened outside Apps Script ---------- */
+function demo(fn, ...args) {
+  if (!demo.db) {
+    const t = new Date(); const iso = (n) => { const d = new Date(t); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
+    demo.db = {
+      today: iso(0), formUrl: 'https://forms.gle/example', appUrl: 'https://pratica.mnesti.it',
+      people: [
+        { name: 'Anna Rossi', region: 'Milano', format: 'Both', days: ['Monday','Wednesday','Saturday'], slots: ['Evening (18–22)'], frequency: 'Weekly', setup: 'Triad (practitioner, client, observer)', languages: ['Italian','English'], phone: '333 1234567', notes: 'Would like to practice orienting and resourcing.' },
+        { name: 'Luca Bianchi', region: 'Roma', format: 'Online', days: ['Tuesday','Wednesday','Thursday'], slots: ['Lunchtime (12–14)','Evening (18–22)'], frequency: 'Every two weeks', setup: 'Dyad (2 people)', languages: ['Italian'], phone: '', notes: '' },
+        { name: 'Sara Conti', region: 'Bologna', format: 'In person', days: ['Saturday','Sunday'], slots: ['Morning (8–12)','Afternoon (14–18)'], frequency: 'Monthly', setup: 'No preference', languages: ['Italian'], phone: '', notes: '' },
+      ],
+      bookings: [{ id: 'demo1', by: 'Anna Rossi', with: 'Luca Bianchi', date: iso(3), time: '19:00', format: 'Online', note: 'Zoom', status: 'proposed' }],
+    };
+  }
+  const db = demo.db;
+  if (fn === 'createBooking') {
+    const b = args[0];
+    if (db.bookings.some(x => x.date === b.date && x.time === b.time && [x.by, x.with].some(n => n === b.by || n === b.with)))
+      throw new Error(['ERR_CLASH', b.by, b.with, b.time].join('|'));
+    db.bookings.push({ id: String(Date.now()), status: 'proposed', ...b });
+  }
+  if (fn === 'confirmBooking') db.bookings.find(b => b.id === args[0]).status = 'confirmed';
+  if (fn === 'cancelBooking') db.bookings = db.bookings.filter(b => b.id !== args[0]);
+  db.bookings.sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
+  return JSON.parse(JSON.stringify(db));
+}
+</script>
+</body>
+</html>
