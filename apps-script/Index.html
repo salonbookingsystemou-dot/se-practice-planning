@@ -342,8 +342,8 @@ const T = () => STR[state.lang];
 
 try {
   state.me = localStorage.getItem('se-me') || '';
-  state.lang = localStorage.getItem('se-lang') || (/^it/i.test(navigator.language || '') ? 'it' : 'en');
-} catch (e) { state.lang = /^it/i.test(navigator.language || '') ? 'it' : 'en'; }
+  state.lang = localStorage.getItem('se-lang') || 'it';   // Italian by default; the choice made with IT · EN is remembered
+} catch (e) { state.lang = 'it'; }
 if (!STR[state.lang]) state.lang = 'it';
 
 /* Translate a value coming from the form ("Triad (practitioner, client, observer)" → "Triade …") */
