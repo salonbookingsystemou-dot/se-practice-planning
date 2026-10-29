@@ -1059,7 +1059,8 @@ function initGoogle() {
   if ($('login-dlg').open) renderGoogleButton();
 }
 function renderGoogleButton() {
-  if (!googleReady) { $('g-btn').innerHTML = ''; return; }
+  $('g-btn').innerHTML = '';   // draw it once, even if called again while Google finishes loading
+  if (!googleReady) return;
   google.accounts.id.renderButton($('g-btn'), { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with',
     locale: state.lang, width: 280 });
 }
