@@ -374,7 +374,7 @@ function errMsg(err) {
 /* ---------- Server calls ----------
    The page runs on GitHub Pages and talks to the Apps Script web app.
    Opened as a local file it uses the sample data at the bottom. */
-const API_URL = 'https://script.google.com/macros/s/AKfycbz6oMKyQi0mPdIRGv_jdM8ewwi5YfXjHthDHwAlcazP5dk3frqs9juHiaJ9u4pFLgNm/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyfsxbMAqalhVvyZ3z8Z3tCQn7l3N_ZMvtSPhKc5M3YwwfBRpjH0wd8CR1fYxNCZSpJ/exec';
 const USE_SAMPLE = location.protocol === 'file:' || /[?&]demo\b/.test(location.search);
 
 async function call(fn, ...args) {
