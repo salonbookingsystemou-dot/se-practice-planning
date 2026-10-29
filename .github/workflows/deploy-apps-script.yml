@@ -1,0 +1,43 @@
+# Publishes apps-script/ to Google Apps Script and updates the SAME web app deployment,
+# so the /exec URL used by index.html never changes.
+# Needs the repository secret CLASPRC_JSON (contents of ~/.clasprc.json after `npx @google/clasp@2.4.2 login`)
+# and the script ID in .clasp.json.
+name: Deploy Apps Script
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps-script/**', '.clasp.json', '.github/workflows/deploy-apps-script.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: apps-script-deploy
+  cancel-in-progress: false
+
+env:
+  # Deployment behind https://script.google.com/macros/s/<this id>/exec (the one in index.html)
+  DEPLOYMENT_ID: AKfycbxN96Sd3NW8w0RULZsR3RRw56doqBrkkkGdk6a8t5rdfAJHzy3VHzrJc7Mq2oxjXHO1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Push code and update the deployment
+        env:
+          CLASPRC: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC" ] || grep -q INCOLLA_QUI .clasp.json; then
+            echo "::warning::Automatic deploy not configured yet (secret CLASPRC_JSON or script ID missing). See apps-script/ISTRUZIONI.md."
+            exit 0
+          fi
+          npm install -g @google/clasp@2.4.2
+          printf '%s' "$CLASPRC" > ~/.clasprc.json
+          clasp push --force
+          clasp deploy --deploymentId "$DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA::7}"
+          echo "::notice::Apps Script updated: https://script.google.com/macros/s/$DEPLOYMENT_ID/exec"

@@ -20,6 +20,20 @@ L'app ha due parti:
 L'URL che termina con `/exec` è già scritto in `index.html` (costante `API_URL`). Se un giorno cambia, va aggiornato lì.
 Aggiornando sempre lo **stesso** deployment (Nuova versione), l'URL non cambia.
 
+## Aggiornamento automatico da GitHub
+Ogni modifica a `apps-script/` su GitHub viene pubblicata da sola sullo **stesso** deployment (azione *Deploy Apps Script*).
+Configurazione, una volta sola:
+1. Attiva l'API: https://script.google.com/home/usersettings → **API di Google Apps Script: On**.
+2. In Apps Script → **Impostazioni progetto** (ingranaggio) copia lo **ID script** e mettilo in `.clasp.json` al posto di `INCOLLA_QUI_LO_SCRIPT_ID`.
+3. Sul tuo computer, nel Terminale: `npx @google/clasp@2.4.2 login` → si apre il browser, accedi con l'account dello script e consenti.
+4. Apri il file creato: `cat ~/.clasprc.json`, copia tutto il contenuto.
+5. Su GitHub → **Settings → Secrets and variables → Actions → New repository secret**: nome `CLASPRC_JSON`, valore = il contenuto copiato.
+6. Su GitHub → **Actions → Deploy Apps Script → Run workflow** per la prima pubblicazione.
+
+Da lì in poi non si copia più nulla a mano. Il file `appsscript.json` porta con sé fuso orario, servizio Calendar e
+impostazioni del web app (*Esegui come: Me*, *Accesso: Chiunque*). Le autorizzazioni nuove (per esempio un servizio aggiunto)
+vanno comunque confermate una volta nell'editor eseguendo `testEmail`.
+
 ## Modulo Google
 - Titoli delle domande con queste parole chiave: *Name, Region, Session format, Available days, time slots, How often, setup, Language, Phone, Notes, Photo*.
 - Email: attiva **Raccogli indirizzi email** nelle impostazioni del modulo (oppure una domanda con «email» nel titolo).
