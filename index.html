@@ -730,7 +730,7 @@ function demo(fn, ...args) {
   if (!demo.db) {
     const t = new Date(); const iso = (n) => { const d = new Date(t); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
     demo.db = {
-      today: iso(0), formUrl: 'https://forms.gle/example', appUrl: 'https://pratica.mnesti.it',
+      today: iso(0), formUrl: 'https://forms.gle/example', appUrl: 'https://se-practice.mnesti.it',
       people: [
         { name: 'Anna Rossi', region: 'Milano', format: 'Both', days: ['Monday','Wednesday','Saturday'], slots: ['Evening (18–22)'], frequency: 'Weekly', setup: 'Triad (practitioner, client, observer)', languages: ['Italian','English'], phone: '333 1234567', notes: 'Would like to practice orienting and resourcing.' },
         { name: 'Luca Bianchi', region: 'Roma', format: 'Online', days: ['Tuesday','Wednesday','Thursday'], slots: ['Lunchtime (12–14)','Evening (18–22)'], frequency: 'Every two weeks', setup: 'Dyad (2 people)', languages: ['Italian'], phone: '', notes: '' },
