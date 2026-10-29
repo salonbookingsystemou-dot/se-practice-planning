@@ -253,18 +253,18 @@ function notify_(event, b, people, lang) {
       ['', tpl.action, url, '', '—', t.footer]).join('\n');
 
     const html =
-      '<div style="background:#F5F1E7;padding:28px 16px;font-family:Helvetica,Arial,sans-serif;color:#262419">' +
-      '<div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #E2DBC9;border-radius:16px;padding:28px">' +
-      '<p style="margin:0 0 6px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:bold;color:#4B6B57">SE Practice Partners</p>' +
-      '<p style="margin:0 0 18px;font-family:Georgia,serif;font-size:21px;line-height:1.3">' + esc_(tpl.lead(v)) + '</p>' +
+      '<div style="background:#F7F3F5;padding:28px 16px;font-family:Roboto,Helvetica,Arial,sans-serif;color:#3D3D3D">' +
+      '<div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #E5DCE1;border-radius:16px;padding:28px">' +
+      '<p style="margin:0 0 6px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:bold;color:#D86018">SE Practice Partners</p>' +
+      '<p style="margin:0 0 18px;font-family:Comfortaa,Trebuchet MS,Helvetica,sans-serif;font-size:20px;color:#6C1D45;line-height:1.3">' + esc_(tpl.lead(v)) + '</p>' +
       '<table style="border-collapse:collapse;width:100%;font-size:15px;margin-bottom:20px">' +
       rows.map(function (r) {
-        return '<tr><td style="padding:8px 0;border-top:1px solid #ECE6D7;color:#6B6553;width:90px;vertical-align:top">' + esc_(r[0]) +
-          '</td><td style="padding:8px 0;border-top:1px solid #ECE6D7">' + esc_(r[1]) + '</td></tr>';
+        return '<tr><td style="padding:8px 0;border-top:1px solid #EFE8EC;color:#6E686B;width:90px;vertical-align:top">' + esc_(r[0]) +
+          '</td><td style="padding:8px 0;border-top:1px solid #EFE8EC">' + esc_(r[1]) + '</td></tr>';
       }).join('') + '</table>' +
       '<p style="margin:0 0 18px;font-size:15px">' + esc_(tpl.action) + '</p>' +
-      '<a href="' + esc_(url) + '" style="display:inline-block;background:#3F5443;color:#fff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:12px">' + esc_(tpl.button) + '</a>' +
-      '</div><p style="max-width:520px;margin:16px auto 0;font-size:12px;color:#6B6553;text-align:center">' + esc_(t.footer) + '</p></div>';
+      '<a href="' + esc_(url) + '" style="display:inline-block;background:#6C1D45;color:#fff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:12px">' + esc_(tpl.button) + '</a>' +
+      '</div><p style="max-width:520px;margin:16px auto 0;font-size:12px;color:#6E686B;text-align:center">' + esc_(t.footer) + '</p></div>';
 
     const opts = { name: CONFIG.SENDER_NAME, htmlBody: html };
     if (from.email) opts.replyTo = from.email;   // replies go to the other student, not to the app owner
