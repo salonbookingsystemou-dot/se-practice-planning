@@ -302,6 +302,20 @@
   </div>
 </dialog>
 
+<dialog id="who-dlg" aria-labelledby="who-title">
+  <form class="dlg" id="who-form" method="dialog">
+    <p class="eyebrow" data-i18n="whoEyebrow"></p>
+    <h2 id="who-title" data-i18n="whoTitle"></h2>
+    <p class="hint" data-i18n="whoText"></p>
+    <div class="field"><label for="who-name" data-i18n="iAm"></label><select id="who-name" required></select></div>
+    <p class="hint"><span data-i18n="whoMissing"></span> <a id="who-form-link" href="#" target="_blank" rel="noopener" data-i18n="ctaButton"></a></p>
+    <div class="dlg-actions">
+      <button type="button" class="btn btn-ghost" id="who-skip" data-i18n="whoSkip"></button>
+      <button type="submit" class="btn" data-i18n="whoGo"></button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="photo-dlg" aria-labelledby="ph-title">
   <div class="dlg">
     <p class="eyebrow" data-i18n="phEyebrow"></p>
@@ -374,6 +388,8 @@ const STR = {
     message: 'Messaggio', close: 'Chiudi', copy: 'Copia messaggio', tellWa: 'Avvisa su WhatsApp',
     copied: 'Messaggio copiato.', chooseFirst: 'Prima scegli il tuo nome in alto.',
     confirmedToast: 'Sessione confermata.', cancelledToast: 'Sessione annullata.', cancelAsk: 'Annullare questa sessione?',
+    whoEyebrow: 'Benvenuto/a', whoTitle: 'Chi sei?', whoText: 'Scegli il tuo nome: l\'app ti mostrerà con chi hai fasce in comune e lo ricorderà su questo dispositivo.',
+    whoMissing: 'Non trovi il tuo nome?', whoSkip: 'Solo guardare', whoGo: 'Continua',
     phEyebrow: 'Il tuo profilo', phTitle: 'Aggiungi la tua foto',
     phText: 'Così i compagni ti riconoscono subito. Puoi scattarla ora o sceglierla dalla galleria.',
     phCamera: 'Scatta una foto', phGallery: 'Dalla galleria', phLater: 'Più tardi', phSave: 'Salva la foto',
@@ -445,6 +461,8 @@ const STR = {
     message: 'Message', close: 'Close', copy: 'Copy message', tellWa: 'Tell them on WhatsApp',
     copied: 'Message copied.', chooseFirst: 'Choose your name at the top first.',
     confirmedToast: 'Session confirmed.', cancelledToast: 'Session cancelled.', cancelAsk: 'Cancel this session?',
+    whoEyebrow: 'Welcome', whoTitle: 'Who are you?', whoText: 'Choose your name: the app will show who shares your free slots and remember it on this device.',
+    whoMissing: 'Can\'t find your name?', whoSkip: 'Just browse', whoGo: 'Continue',
     phEyebrow: 'Your profile', phTitle: 'Add your photo',
     phText: 'So your classmates recognise you right away. Take one now or pick one from your gallery.',
     phCamera: 'Take a photo', phGallery: 'From gallery', phLater: 'Later', phSave: 'Save photo',
@@ -881,6 +899,25 @@ $('tab-people').onclick = () => selectTab('people');
 $('tab-sessions').onclick = () => selectTab('sessions');
 document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => setLang(b.dataset.lang));
 
+/* ---------- First visit: who are you? ---------- */
+function maybeAskWho() {
+  if (state.me || new URLSearchParams(location.search).has('me') || $('who-dlg').open || $('dlg').open) return;
+  var skipped = false; try { skipped = sessionStorage.getItem('se-who-skip') === '1'; } catch (e) {}
+  if (skipped || !state.people.length) return;
+  $('who-name').innerHTML = `<option value="">${esc(T().chooseName)}</option>` +
+    state.people.map(p => `<option>${esc(p.name)}</option>`).join('');
+  $('who-form-link').href = state.formUrl || '#';
+  $('who-dlg').showModal();
+}
+$('who-form').onsubmit = (e) => {
+  e.preventDefault();
+  const n = $('who-name').value;
+  if (!n) return $('who-name').focus();
+  $('who-dlg').close();
+  setMe(n);   // also opens the photo dialog when there is no photo yet
+};
+$('who-skip').onclick = () => { try { sessionStorage.setItem('se-who-skip', '1'); } catch (e) {} $('who-dlg').close(); };
+
 /* ---------- Photo ---------- */
 const photo = { data: '' };
 
@@ -994,7 +1031,7 @@ applyTexts();
 renderLoading();
 const slowTimer = setTimeout(() => { const el = $('loading-text'); if (el) el.textContent = T().loadingSlow; }, 4000);
 recognise();
-call('getData').then(data => { apply(data); maybeAskPhoto(); }).catch(err => {
+call('getData').then(data => { apply(data); state.me ? maybeAskPhoto() : maybeAskWho(); }).catch(err => {
   $('people').innerHTML = `<div class="error">${esc(T().loadError)} ${esc(errMsg(err))}</div>`;
   $('sessions').innerHTML = '';
 }).finally(() => { clearTimeout(slowTimer); $('people').removeAttribute('aria-busy'); });
