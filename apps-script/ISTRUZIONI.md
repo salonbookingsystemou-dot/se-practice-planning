@@ -52,12 +52,16 @@ Nel modulo di proposta si può scegliere un **terzo partecipante** (facoltativo)
 ognuno conferma per sé e la sessione diventa «Confermata» quando hanno confermato tutti e due.
 Nel foglio «Bookings» le colonne *Third* e *Confirmed by* si aggiungono da sole.
 
-## Link personale e foto
-- Ogni email dell'app contiene il **link personale** del destinatario (`…/?me=<codice>`): aprendolo, l'app lo riconosce
-  e preimposta «Io sono». Il codice è segreto, diverso per ognuno, e non compare mai nella pagina.
-- Chi non ha la foto vede una finestra per **scattarla o sceglierla dalla galleria**. Per caricarla serve il link personale:
-  chi non ce l'ha lo chiede con «Inviami il link» e lo riceve via email (al massimo uno ogni 10 minuti).
-- Le foto caricate dall'app (piccole, 320 px) stanno nel foglio «Photos» e hanno la precedenza su quelle del modulo.
+## Accesso: Google o link personale
+Non c'è più il menu «Io sono»: chi non ha fatto l'accesso può solo guardare.
+- **Accedi con Google**: un clic con l'account usato nel modulo. Il motore verifica con Google la firma dell'accesso
+  e confronta l'email con quella del modulo. Dalle visite successive l'accesso è automatico. ID client in `GOOGLE_CLIENT_ID`
+  (`Code.gs`) e in `index.html`; l'origine autorizzata nella console Google è `https://se-practice.mnesti.it`.
+- **Link personale via email** (per chi non usa Google): si inserisce l'email del modulo e arriva `…/?me=<codice>`.
+  La risposta è la stessa anche per email sconosciute; al massimo un link ogni 10 minuti per persona.
+- Ogni azione (proporre, confermare, annullare, «Ora sono libero», foto) richiede il codice personale:
+  il nome lo ricava il motore, quindi nessuno può agire a nome di altri. «Esci» in alto toglie l'accesso dal dispositivo.
+- Le foto caricate dall'app (320 px) stanno nel foglio «Photos» e hanno la precedenza su quelle del modulo.
 
 ## «Ora sono libero»
 Nella propria card c'è uno switch con una durata (30 min, 1, 2 o 3 ore): finché è attivo la card è evidenziata in arancio,

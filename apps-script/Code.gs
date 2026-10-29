@@ -7,6 +7,7 @@
 
 const CONFIG = {
   FORM_URL: 'https://forms.gle/Je4gaWUF94cij7Vb8',   // link to the Google Form (Send → link)
+  GOOGLE_CLIENT_ID: '845019442597-j5b4h0tj7p3jc5pnnv9scgr0rqj7r8hv.apps.googleusercontent.com',   // «Accedi con Google»
   APP_URL: 'https://se-practice.mnesti.it',                                // short link to the app (e.g. https://pratica.mnesti.it); empty = Apps Script URL
   RESPONSES_SHEET: '',      // leave empty to auto-detect the sheet with the form responses
   BOOKINGS_SHEET: 'Bookings',
@@ -27,7 +28,7 @@ const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time',
    POST …/exec  body: {"fn": "...", "args": [...]}  (sent as text/plain to avoid CORS preflight) */
 
 const API = { getData: getData, createBooking: createBooking, confirmBooking: confirmBooking, cancelBooking: cancelBooking,
-              whoAmI: whoAmI, sendMyLink: sendMyLink, uploadPhoto: uploadPhoto, getNow: getNow, setFreeNow: setFreeNow };
+              whoAmI: whoAmI, signIn: signIn, requestLink: requestLink, uploadPhoto: uploadPhoto, getNow: getNow, setFreeNow: setFreeNow };
 
 function doGet(e) {
   const fn = e && e.parameter && e.parameter.fn;
@@ -170,22 +171,50 @@ function personByKey_(k) {
 /* The page calls this when opened from a personal link */
 function whoAmI(k) {
   const p = personByKey_(k);
-  return p ? { name: p.name } : null;
+  return p ? { name: p.name, key: k } : null;
+}
+
+/* Every action that changes something goes through here: the name comes from the key, never from the page */
+function actor_(k) {
+  const p = personByKey_(k);
+  if (!p) throw new Error('ERR_NOT_YOU');
+  return p;
+}
+
+/* «Accedi con Google»: the page sends Google's signed ID token; we check it with Google and match the email
+   with the one in the form responses. */
+function signIn(idToken) {
+  if (!idToken) throw new Error('ERR_BAD_REQUEST');
+  const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken), { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error('ERR_SIGNIN');
+  const info = JSON.parse(res.getContentText());
+  const verified = info.email_verified === true || info.email_verified === 'true';
+  if (info.aud !== CONFIG.GOOGLE_CLIENT_ID || !verified || Number(info.exp) * 1000 < Date.now()) throw new Error('ERR_SIGNIN');
+  const p = readPeople_().find(function (x) { return x.email && key_(x.email) === key_(info.email); });
+  if (!p) throw new Error('ERR_NOT_IN_LIST|' + info.email);
+  return { name: p.name, key: personKey_(p.name) };
+}
+
+/* Fallback for people who don't use Google: the personal link by email. Same answer whether or not the email is known. */
+function requestLink(email, lang) {
+  const e = String(email || '').trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new Error('ERR_EMAIL');
+  const p = readPeople_().find(function (x) { return x.email && key_(x.email) === key_(e); });
+  if (p) sendLink_(p, lang);
+  return { sent: true };
 }
 
 /* Emails someone their personal link (no more than once every 10 minutes per person) */
-function sendMyLink(name, lang) {
-  const p = readPeople_().find(function (x) { return key_(x.name) === key_(name); });
-  if (!p) throw new Error('ERR_PICK_TWO');
-  if (!p.email) throw new Error('ERR_NO_EMAIL');
+function sendLink_(p, lang) {
+  if (!p.email) return { sent: false };
   const cache = CacheService.getScriptCache();
   if (cache.get('link_' + key_(p.name))) return { sent: true };
   const it = (lang || 'it') === 'it';
   const url = personalUrl_(p.name);
   const lead = it ? 'Ecco il tuo link personale per l\'app dei compagni di pratica SE.'
                   : 'Here is your personal link to the SE practice partners app.';
-  const body = it ? 'Aprendolo, l\'app ti riconosce subito e puoi caricare la tua foto. Tienilo per te.'
-                  : 'Opening it, the app recognises you right away and you can upload your photo. Keep it to yourself.';
+  const body = it ? 'Aprendolo, l\'app ti riconosce su questo dispositivo: puoi proporre sessioni, confermarle e caricare la tua foto. Non inoltrarlo: chi lo apre agisce a nome tuo.'
+                  : 'Opening it, the app recognises you on that device: you can propose and confirm sessions and upload your photo. Don\'t forward it: whoever opens it acts as you.';
   const button = it ? 'Apri l\'app' : 'Open the app';
   const html = mailFrame_(lead, '<p style="margin:0 0 18px;font-size:15px">' + esc_(body) + '</p>', url, button, MAIL[it ? 'it' : 'en'].footer);
   MailApp.sendEmail(p.email, it ? 'Il tuo link personale · SE Practice Partners' : 'Your personal link · SE Practice Partners',
@@ -247,9 +276,8 @@ const FREE_MINUTES = [30, 60, 120, 180];
 /* Polled by the page every minute: only names and end times, nothing else */
 function getNow() { return { now: readNow_(), serverTime: new Date().toISOString() }; }
 
-function setFreeNow(name, minutes) {
-  const p = readPeople_().find(function (x) { return key_(x.name) === key_(name); });
-  if (!p) throw new Error('ERR_PICK_TWO');
+function setFreeNow(k, minutes) {
+  const p = actor_(k);
   const mins = Number(minutes) || 0;
   if (mins && FREE_MINUTES.indexOf(mins) === -1) throw new Error('ERR_BAD_REQUEST');
   const until = mins ? new Date(Date.now() + mins * 60000) : '';
@@ -301,7 +329,7 @@ function createBooking(input) {
     const names = {};
     people.forEach(function (p) { names[key_(p.name)] = p.name; });
 
-    const by = names[key_(input.by)];
+    const by = actor_(input.key).name;   // who proposes = whoever holds the key
     const withName = names[key_(input.with)];
     const third = input.third ? names[key_(input.third)] : '';
     if (!by || !withName || (input.third && !third)) throw new Error('ERR_PICK_TWO');
@@ -334,7 +362,8 @@ function createBooking(input) {
 }
 
 /* Each invited person confirms for themselves; the session is "confirmed" once everyone invited has confirmed. */
-function confirmBooking(id, name, lang) {
+function confirmBooking(id, k, lang) {
+  const name = actor_(k).name;
   return withBooking_(id, function (b, row, sheet) {
     const who = invitees_(b).find(function (n) { return key_(n) === key_(name); });
     if (!who) throw new Error('ERR_ONLY_INVITED');
@@ -353,7 +382,8 @@ function confirmBooking(id, name, lang) {
   }, lang);
 }
 
-function cancelBooking(id, name, lang) {
+function cancelBooking(id, k, lang) {
+  const name = actor_(k).name;
   return withBooking_(id, function (b, row, sheet) {
     const who = participants_(b).find(function (n) { return key_(n) === key_(name); });
     if (!who) throw new Error('ERR_ONLY_PAIR');

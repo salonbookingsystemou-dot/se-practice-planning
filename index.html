@@ -25,6 +25,7 @@
 <meta name="twitter:image" content="https://se-practice.mnesti.it/og-image.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
     /* Palette inspired by traumahealing.org */
@@ -204,6 +205,14 @@
   .chip-now { display: inline-flex; align-items: center; gap: 6px; }
   .chip-now .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ochre); }
   @media (prefers-reduced-motion: reduce) { .free-badge .dot { animation: none; } .switch .track, .switch .track::after { transition: none; } }
+  .account { display: flex; align-items: center; gap: 10px; justify-content: flex-end; min-height: 44px; }
+  .account .who-mini { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .account .avatar, .account .avatar.photo { width: 36px; height: 36px; font-size: 13px; }
+  .account .btn-text { font-size: 13px; color: var(--muted); }
+  .g-btn { display: flex; justify-content: center; min-height: 44px; }
+  .or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+  .or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .link-form { display: grid; gap: 10px; }
   .add-photo { font-size: 12px; color: var(--ochre-ink); background: var(--ochre-soft); border: 0; border-radius: 99px; padding: 3px 9px; cursor: pointer; font-weight: 600; }
   .avatar-btn { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; }
   .form-error { color: var(--danger); font-size: 13px; margin: 0; }
@@ -242,10 +251,7 @@
         <button type="button" data-lang="it" aria-pressed="false">IT</button>
         <button type="button" data-lang="en" aria-pressed="false">EN</button>
       </div>
-      <div class="whoami">
-        <label for="me" data-i18n="iAm"></label>
-        <select id="me"></select>
-      </div>
+      <div class="account" id="account"></div>
     </div>
   </header>
 
@@ -293,7 +299,7 @@
 <dialog id="dlg">
   <form class="dlg" id="book" method="dialog">
     <h2 data-i18n="dlgTitle"></h2>
-    <div class="field"><label for="b-by" data-i18n="yourName"></label><select id="b-by" required></select></div>
+    <div class="field"><label for="b-by" data-i18n="yourName"></label><input type="text" id="b-by" readonly></div>
     <div class="field"><label for="b-with" data-i18n="with"></label><select id="b-with" required></select></div>
     <div class="field"><label for="b-third" data-i18n="third"></label><select id="b-third"></select></div>
     <div class="two">
@@ -323,18 +329,24 @@
   </div>
 </dialog>
 
-<dialog id="who-dlg" aria-labelledby="who-title">
-  <form class="dlg" id="who-form" method="dialog">
-    <p class="eyebrow" data-i18n="whoEyebrow"></p>
-    <h2 id="who-title" data-i18n="whoTitle"></h2>
-    <p class="hint" data-i18n="whoText"></p>
-    <div class="field"><label for="who-name" data-i18n="iAm"></label><select id="who-name" required></select></div>
-    <p class="hint"><span data-i18n="whoMissing"></span> <a id="who-form-link" href="#" target="_blank" rel="noopener" data-i18n="ctaButton"></a></p>
+<dialog id="login-dlg" aria-labelledby="login-title">
+  <div class="dlg">
+    <p class="eyebrow" data-i18n="loginEyebrow"></p>
+    <h2 id="login-title" data-i18n="loginTitle"></h2>
+    <p class="hint" data-i18n="loginText"></p>
+    <div class="g-btn" id="g-btn"></div>
+    <div class="or"><span data-i18n="or"></span></div>
+    <form id="link-form" class="link-form">
+      <div class="field"><label for="link-email" data-i18n="linkLabel"></label>
+        <input type="email" id="link-email" autocomplete="email" required></div>
+      <button type="submit" class="btn btn-ghost" id="link-send" data-i18n="linkSend"></button>
+    </form>
+    <p class="ph-note" id="login-msg" role="status" hidden></p>
+    <p class="hint"><span data-i18n="whoMissing"></span> <a id="login-form-link" href="#" target="_blank" rel="noopener" data-i18n="ctaButton"></a></p>
     <div class="dlg-actions">
-      <button type="button" class="btn btn-ghost" id="who-skip" data-i18n="whoSkip"></button>
-      <button type="submit" class="btn" data-i18n="whoGo"></button>
+      <button type="button" class="btn btn-ghost" id="login-skip" data-i18n="whoSkip"></button>
     </div>
-  </form>
+  </div>
 </dialog>
 
 <dialog id="photo-dlg" aria-labelledby="ph-title">
@@ -415,6 +427,12 @@ const STR = {
     freeFor: { 30: '30 minuti', 60: '1 ora', 120: '2 ore', 180: '3 ore' }, freeChip: (n) => `Liberi ora${n ? ' · ' + n : ''}`,
     proposeNow: 'Proponi adesso', freeOnToast: (t) => `Gli altri ti vedono libero/a fino alle ${t}.`, freeOffToast: 'Non risulti più libero/a.',
     noFreeNow: 'In questo momento nessuno si è segnato come libero.',
+    loginEyebrow: 'Accesso', loginTitle: 'Entra nell\'app', signIn: 'Accedi', signOut: 'Esci', hello: (n) => `Ciao, ${n}`,
+    loginText: 'Accedi con l\'account Google che hai usato nel modulo: l\'app ti riconoscerà da sola anche le prossime volte.',
+    or: 'oppure', linkLabel: 'Ricevi un link personale via email', linkSend: 'Mandami il link',
+    linkSent: (e) => `Se ${e} è tra gli iscritti, ti abbiamo mandato il link: aprilo da questo dispositivo.`,
+    notInList: (e) => `L\'email ${e} non è nella lista. Compila il modulo con questo account, oppure ricevi il link all\'email che hai usato nel modulo.`,
+    needLogin: 'Accedi per proporre, confermare o segnarti come libero/a.', welcome: (n) => `Ciao ${n}! Ti abbiamo riconosciuto.`,
     whoEyebrow: 'Benvenuto/a', whoTitle: 'Chi sei?', whoText: 'Scegli il tuo nome: l\'app ti mostrerà con chi hai fasce in comune e lo ricorderà su questo dispositivo.',
     whoMissing: 'Non trovi il tuo nome?', whoSkip: 'Solo guardare', whoGo: 'Continua',
     phEyebrow: 'Il tuo profilo', phTitle: 'Aggiungi la tua foto',
@@ -433,8 +451,9 @@ const STR = {
     err: {
       ERR_PICK_TWO: 'Scegli le persone dalla lista.', ERR_SELF: 'Non puoi prenotare una sessione con te stesso.',
       ERR_THIRD: 'Il terzo partecipante deve essere una persona diversa.',
-      ERR_NOT_YOU: 'Il tuo link personale non è valido: chiedine uno nuovo.', ERR_PHOTO: 'La foto non è valida o è troppo grande.',
-      ERR_NO_EMAIL: 'Nessuna email registrata per questo nome.',
+      ERR_NOT_YOU: 'Accesso scaduto o non valido: accedi di nuovo.', ERR_PHOTO: 'La foto non è valida o è troppo grande.',
+      ERR_NO_EMAIL: 'Nessuna email registrata per questo nome.', ERR_EMAIL: 'Controlla l\'indirizzo email.',
+      ERR_SIGNIN: 'Accesso con Google non riuscito. Riprova o ricevi il link via email.',
       ERR_SETUP: 'L\'invio delle email non è ancora attivo. Avvisa chi gestisce l\'app e riprova più tardi.',
       ERR_NETWORK: 'Connessione non riuscita. Controlla la rete e riprova.', ERR_GENERIC: 'Qualcosa non ha funzionato. Riprova tra poco.',
       ERR_DATE: 'Scegli una data.', ERR_TIME: 'Scegli un orario.', ERR_PAST: 'La data è già passata.',
@@ -496,6 +515,12 @@ const STR = {
     freeFor: { 30: '30 minutes', 60: '1 hour', 120: '2 hours', 180: '3 hours' }, freeChip: (n) => `Free now${n ? ' · ' + n : ''}`,
     proposeNow: 'Propose now', freeOnToast: (t) => `Others see you as free until ${t}.`, freeOffToast: 'You no longer show as free.',
     noFreeNow: 'Nobody has marked themselves as free right now.',
+    loginEyebrow: 'Sign in', loginTitle: 'Enter the app', signIn: 'Sign in', signOut: 'Sign out', hello: (n) => `Hi, ${n}`,
+    loginText: 'Sign in with the Google account you used in the form: the app will recognise you by itself next time.',
+    or: 'or', linkLabel: 'Get a personal link by email', linkSend: 'Email me the link',
+    linkSent: (e) => `If ${e} is registered, we have emailed you the link: open it on this device.`,
+    notInList: (e) => `The email ${e} is not on the list. Fill in the form with this account, or get the link at the email you used in the form.`,
+    needLogin: 'Sign in to propose, confirm or mark yourself as free.', welcome: (n) => `Hi ${n}! We recognised you.`,
     whoEyebrow: 'Welcome', whoTitle: 'Who are you?', whoText: 'Choose your name: the app will show who shares your free slots and remember it on this device.',
     whoMissing: 'Can\'t find your name?', whoSkip: 'Just browse', whoGo: 'Continue',
     phEyebrow: 'Your profile', phTitle: 'Add your photo',
@@ -513,8 +538,9 @@ const STR = {
     err: {
       ERR_PICK_TWO: 'Choose people from the list.', ERR_SELF: "You can't book a session with yourself.",
       ERR_THIRD: 'The third person must be someone else.',
-      ERR_NOT_YOU: 'Your personal link is not valid: ask for a new one.', ERR_PHOTO: 'The photo is not valid or is too large.',
-      ERR_NO_EMAIL: 'No email registered for this name.',
+      ERR_NOT_YOU: 'Your sign-in is missing or no longer valid: please sign in again.', ERR_PHOTO: 'The photo is not valid or is too large.',
+      ERR_NO_EMAIL: 'No email registered for this name.', ERR_EMAIL: 'Check the email address.',
+      ERR_SIGNIN: 'Google sign-in failed. Try again or get the link by email.',
       ERR_SETUP: 'Email sending is not active yet. Let the app organiser know and try again later.',
       ERR_NETWORK: 'Connection failed. Check your network and try again.', ERR_GENERIC: 'Something went wrong. Please try again shortly.',
       ERR_DATE: 'Choose a date.', ERR_TIME: 'Choose a time.', ERR_PAST: 'The date is in the past.',
@@ -542,7 +568,13 @@ const key = (s) => String(s || '').trim().toLowerCase();
 const T = () => STR[state.lang];
 
 try {
-  state.me = localStorage.getItem('se-me') || '';
+  state.session = JSON.parse(localStorage.getItem('se-session') || 'null');
+  if (!state.session) {   // devices that already opened a personal link before this version
+    const old = JSON.parse(localStorage.getItem('se-key') || 'null');
+    if (old && old.key) state.session = old;
+  }
+  state.me = state.session ? state.session.name : '';
+  localStorage.removeItem('se-me');
   state.lang = localStorage.getItem('se-lang') || 'it';   // Italian by default; the choice made with IT · EN is remembered
 } catch (e) { state.lang = 'it'; }
 if (!STR[state.lang]) state.lang = 'it';
@@ -560,6 +592,7 @@ const slotLabel = (v) => { const i = slotIdx(v); return i < 0 ? v : T().slots[i]
 
 function errMsg(err) {
   const raw = String(err && err.message || err);
+  if (/ERR_NOT_YOU/.test(raw) && state.session) setTimeout(() => { setSession(null); openLogin(T().err.ERR_NOT_YOU); }, 0);
   console.error(raw);   // full technical detail stays in the console
   const m = raw.match(/ERR_[A-Z_]+(\|[^\n]*)?/);
   if (!m) return /permission|authoriz|autorizz/i.test(raw) ? T().err.ERR_SETUP
@@ -700,9 +733,12 @@ function buildChips(id, label, items, prop) {
 
 /* ---------- Render ---------- */
 function renderMe() {
-  const t = T();
-  $('me').innerHTML = `<option value="">${esc(t.chooseName)}</option>` +
-    state.people.map(p => `<option ${key(p.name)===key(state.me)?'selected':''}>${esc(p.name)}</option>`).join('');
+  const t = T(), p = meP();
+  $('account').innerHTML = state.me
+    ? `<span class="who-mini">${p && p.photo ? `<img class="avatar photo" src="${esc(p.photo)}" alt="">`
+        : `<span class="avatar" style="background:${tone(state.me)}" aria-hidden="true">${esc(initials(state.me))}</span>`}${esc(t.hello(first(state.me)))}</span>
+       <button type="button" class="btn-text" id="sign-out">${esc(t.signOut)}</button>`
+    : `<button type="button" class="btn" id="sign-in">${esc(t.signIn)}</button>`;
   $('legend').hidden = !meP();
   const url = state.formUrl;
   $('cta').hidden = !url || !!meP();
@@ -816,8 +852,9 @@ function render() { renderMe(); renderPeople(); renderSessions(); }
 
 /* ---------- Booking dialog ---------- */
 function openBooking(withName, now) {
+  if (!myKey()) return openLogin(T().needLogin);
   const opts = (sel) => state.people.map(p => `<option ${key(p.name)===key(sel)?'selected':''}>${esc(p.name)}</option>`).join('');
-  $('b-by').innerHTML = `<option value="">${esc(T().choose)}</option>` + opts(state.me);
+  $('b-by').value = state.me;
   $('b-with').innerHTML = opts(withName);
   fillThird('');
   $('b-date').min = state.today; $('b-date').value = '';
@@ -889,20 +926,18 @@ $('d-copy').onclick = async () => {
   toast(T().copied);
 };
 
-$('b-by').onchange = () => { fillThird(); updateHint(); };
 $('b-with').onchange = () => { fillThird(); updateHint(); };
 $('b-third').onchange = updateHint;
 $('b-cancel').onclick = () => $('dlg').close();
 $('book').onsubmit = async (e) => {
   e.preventDefault();
-  const input = { by: $('b-by').value, with: $('b-with').value, third: $('b-third').value, date: $('b-date').value, time: $('b-time').value,
+  const input = { key: myKey(), by: state.me, with: $('b-with').value, third: $('b-third').value, date: $('b-date').value, time: $('b-time').value,
                   format: $('b-format').value, note: $('b-note').value.trim(), lang: state.lang };
-  if (!input.by) { $('b-error').textContent = T().pickName; return; }
+  if (!input.key) { $('dlg').close(); return openLogin(T().needLogin); }
   $('b-submit').disabled = true; $('b-error').textContent = '';
   try {
     const data = await call('createBooking', input);
     apply(data);
-    if (!state.me) setMe(input.by);
     showDone(input, data.emailed);
   } catch (err) {
     $('b-error').textContent = errMsg(err);
@@ -910,7 +945,16 @@ $('book').onsubmit = async (e) => {
 };
 
 /* ---------- Events ---------- */
-function setMe(name) { state.me = name; try { localStorage.setItem('se-me', name); } catch (e) {} render(); maybeAskPhoto(); }
+function setSession(sess, greet) {
+  state.session = sess; state.me = sess ? sess.name : '';
+  try { sess ? localStorage.setItem('se-session', JSON.stringify(sess)) : localStorage.removeItem('se-session'); localStorage.removeItem('se-key'); } catch (e) {}
+  render();
+  if (sess) { if (greet) toast(T().welcome(first(sess.name))); maybeAskPhoto(); }
+}
+function signOut() {
+  setSession(null);
+  try { google.accounts.id.disableAutoSelect(); } catch (e) {}
+}
 function setLang(l) { state.lang = l; try { localStorage.setItem('se-lang', l); } catch (e) {} applyTexts(); render(); }
 function apply(data) {
   state.people = data.people; state.bookings = data.bookings; state.today = data.today;
@@ -918,10 +962,7 @@ function apply(data) {
   render();
 }
 /* Personal key from the email link (?me=<key>), kept on this device together with the name it belongs to */
-function myKey() {
-  try { const k = JSON.parse(localStorage.getItem('se-key') || 'null'); return k && key(k.name) === key(state.me) ? k.key : ''; }
-  catch (e) { return ''; }
-}
+function myKey() { return state.session && state.session.key || ''; }
 async function recognise() {
   const params = new URLSearchParams(location.search);
   const k = params.get('me');
@@ -932,9 +973,8 @@ async function recognise() {
   try {
     const who = await call('whoAmI', k);
     if (!who) return;
-    try { localStorage.setItem('se-key', JSON.stringify({ name: who.name, key: k })); } catch (e) {}
-    state.me = who.name; try { localStorage.setItem('se-me', who.name); } catch (e) {}
-    if (state.people.length) { render(); maybeAskPhoto(); }
+    if ($('login-dlg').open) $('login-dlg').close();
+    setSession({ name: who.name, key: who.key || k }, true);
   } catch (e) { /* an invalid link simply leaves the app as it is */ }
 }
 function selectTab(tab) {
@@ -944,7 +984,6 @@ function selectTab(tab) {
   $('panel-sessions').hidden = tab !== 'sessions';
 }
 
-$('me').onchange = (e) => setMe(e.target.value);
 $('q').oninput = (e) => { state.q = e.target.value; updateFilterUI(); renderPeople(); };
 $('f-toggle').onclick = () => setFiltersOpen($('filters').hidden);
 $('f-reset').onclick = () => {
@@ -977,7 +1016,8 @@ async function setFree(on) {
   p.freeUntil = on ? new Date(Date.now() + mins * 60000).toISOString() : '';   // show it straight away
   renderPeople();
   try {
-    const res = await call('setFreeNow', p.name, mins);
+    if (!myKey()) { renderPeople(); return openLogin(T().needLogin); }
+    const res = await call('setFreeNow', myKey(), mins);
     applyNow(res.now); renderPeople();
     toast(on ? t.freeOnToast(hhmm(new Date(meP().freeUntil))) : t.freeOffToast);
   } catch (err) { p.freeUntil = before; renderPeople(); toast(errMsg(err)); }
@@ -1004,24 +1044,66 @@ document.addEventListener('visibilitychange', async () => {
   }
 });
 
-/* ---------- First visit: who are you? ---------- */
-function maybeAskWho() {
-  if (state.me || new URLSearchParams(location.search).has('me') || $('who-dlg').open || $('dlg').open) return;
-  var skipped = false; try { skipped = sessionStorage.getItem('se-who-skip') === '1'; } catch (e) {}
-  if (skipped || !state.people.length) return;
-  $('who-name').innerHTML = `<option value="">${esc(T().chooseName)}</option>` +
-    state.people.map(p => `<option>${esc(p.name)}</option>`).join('');
-  $('who-form-link').href = state.formUrl || '#';
-  $('who-dlg').showModal();
+/* ---------- Sign in: Google first, personal link by email as fallback ---------- */
+const GOOGLE_CLIENT_ID = '845019442597-j5b4h0tj7p3jc5pnnv9scgr0rqj7r8hv.apps.googleusercontent.com';
+let googleReady = false;
+
+function initGoogle() {
+  if (googleReady || !window.google || !google.accounts || !google.accounts.id || USE_SAMPLE) return;
+  googleReady = true;
+  google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: onGoogle, auto_select: true,
+    cancel_on_tap_outside: false, context: 'signin', itp_support: true });
+  // Someone who already signed in with Google once: try silently, no click needed
+  var had = false; try { had = localStorage.getItem('se-google') === '1'; } catch (e) {}
+  if (!state.session && had) google.accounts.id.prompt();
+  if ($('login-dlg').open) renderGoogleButton();
 }
-$('who-form').onsubmit = (e) => {
+function renderGoogleButton() {
+  if (!googleReady) { $('g-btn').innerHTML = ''; return; }
+  google.accounts.id.renderButton($('g-btn'), { theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with',
+    locale: state.lang, width: 280 });
+}
+async function onGoogle(resp) {
+  showLoginMsg('');
+  try {
+    const sess = await call('signIn', resp.credential);
+    try { localStorage.setItem('se-google', '1'); } catch (e) {}
+    if ($('login-dlg').open) $('login-dlg').close();
+    setSession(sess, true);
+  } catch (err) {
+    const m = String(err && err.message || err).match(/ERR_NOT_IN_LIST\|(\S+)/);
+    openLogin(m ? T().notInList(m[1]) : errMsg(err));
+  }
+}
+function showLoginMsg(text) { $('login-msg').textContent = text; $('login-msg').hidden = !text; }
+function openLogin(message) {
+  $('login-form-link').href = state.formUrl || '#';
+  showLoginMsg(message || '');
+  if (!$('login-dlg').open) $('login-dlg').showModal();
+  renderGoogleButton();
+}
+/* First visit without a session: show the sign-in window once per browser session */
+function maybeAskLogin() {
+  if (state.session || new URLSearchParams(location.search).has('me') || $('dlg').open || $('login-dlg').open) return;
+  var skipped = false; try { skipped = sessionStorage.getItem('se-login-skip') === '1'; } catch (e) {}
+  if (!skipped && state.people.length) openLogin();
+}
+$('link-form').onsubmit = async (e) => {
   e.preventDefault();
-  const n = $('who-name').value;
-  if (!n) return $('who-name').focus();
-  $('who-dlg').close();
-  setMe(n);   // also opens the photo dialog when there is no photo yet
+  const email = $('link-email').value.trim();
+  $('link-send').disabled = true;
+  try { await call('requestLink', email, state.lang); showLoginMsg(T().linkSent(email)); }
+  catch (err) { showLoginMsg(errMsg(err)); }
+  finally { $('link-send').disabled = false; }
 };
-$('who-skip').onclick = () => { try { sessionStorage.setItem('se-who-skip', '1'); } catch (e) {} $('who-dlg').close(); };
+$('login-skip').onclick = () => { try { sessionStorage.setItem('se-login-skip', '1'); } catch (e) {} $('login-dlg').close(); };
+document.addEventListener('click', (e) => {
+  if (e.target.closest('#sign-in')) openLogin();
+  if (e.target.closest('#sign-out')) signOut();
+});
+window.addEventListener('load', initGoogle);
+const gWait = setInterval(() => { initGoogle(); if (googleReady) clearInterval(gWait); }, 300);
+setTimeout(() => clearInterval(gWait), 15000);
 
 /* ---------- Photo ---------- */
 const photo = { data: '' };
@@ -1029,21 +1111,19 @@ const photo = { data: '' };
 /* Ask once in a while: when I'm chosen, have no photo and didn't say "later" in the last 3 days */
 function maybeAskPhoto() {
   const p = meP();
-  if (!p || p.photo || $('photo-dlg').open || $('dlg').open) return;
+  if (!p || !myKey() || p.photo || $('photo-dlg').open || $('dlg').open) return;
   var later = 0; try { later = Number(localStorage.getItem('se-photo-later') || 0); } catch (e) {}
   if (Date.now() - later < 3 * 864e5) return;
   openPhoto();
 }
 
 function openPhoto() {
-  const t = T(), p = meP();
-  if (!p) return toast(t.chooseFirst);
-  const k = myKey();
+  const p = meP();
+  if (!p || !myKey()) return openLogin(T().needLogin);
   photo.data = '';
   $('ph-error').textContent = '';
-  $('ph-upload').hidden = !k; $('ph-save').hidden = !k; $('ph-save').disabled = true;
-  $('ph-link').hidden = !!k; $('ph-send').hidden = !!k || !p.hasEmail;
-  $('ph-link-text').textContent = p.hasEmail ? t.phNeedLink : t.phNoEmail;
+  $('ph-upload').hidden = false; $('ph-save').hidden = false; $('ph-save').disabled = true;
+  $('ph-link').hidden = true; $('ph-send').hidden = true;
   const pv = $('ph-preview');
   pv.style.backgroundImage = p.photo ? `url("${p.photo}")` : '';
   pv.textContent = p.photo ? '' : initials(p.name);
@@ -1089,13 +1169,6 @@ $('ph-save').onclick = async () => {
   try { apply(await call('uploadPhoto', myKey(), photo.data)); $('photo-dlg').close(); toast(T().phSaved); }
   catch (err) { $('ph-error').textContent = errMsg(err); $('ph-save').disabled = false; }
 };
-$('ph-send').onclick = async () => {
-  $('ph-send').disabled = true; $('ph-error').textContent = '';
-  try { await call('sendMyLink', state.me, state.lang); $('ph-link-text').textContent = T().phLinkSent; $('ph-send').hidden = true;
-        try { localStorage.setItem('se-photo-later', String(Date.now())); } catch (e) {} }
-  catch (err) { $('ph-error').textContent = errMsg(err); }
-  finally { $('ph-send').disabled = false; }
-};
 
 document.addEventListener('click', async (e) => {
   if (e.target.closest('[data-photo]')) return openPhoto();
@@ -1103,16 +1176,16 @@ document.addEventListener('click', async (e) => {
   if (!el) return;
   if (el.dataset.book) return openBooking(el.dataset.book, !!el.dataset.now);
   const t = T();
-  if (!state.me) return toast(t.chooseFirst);
+  if (!myKey()) return openLogin(t.needLogin);
   el.disabled = true;
   try {
     if (el.dataset.confirm) {
-      const d = await call('confirmBooking', el.dataset.confirm, state.me, state.lang); apply(d);
+      const d = await call('confirmBooking', el.dataset.confirm, myKey(), state.lang); apply(d);
       toast(d.scheduled ? (d.meet ? t.scheduledMeet : t.scheduledNoMeet)
             : asList(d.emailed).length ? t.emailedConfirm(joinNames(asList(d.emailed).map(first))) : t.confirmedToast);
     }
     if (el.dataset.cancel && confirm(t.cancelAsk)) {
-      const d = await call('cancelBooking', el.dataset.cancel, state.me, state.lang); apply(d);
+      const d = await call('cancelBooking', el.dataset.cancel, myKey(), state.lang); apply(d);
       toast(asList(d.emailed).length ? t.emailedCancel(joinNames(asList(d.emailed).map(first))) : t.cancelledToast);
     }
   } catch (err) { toast(errMsg(err)); }
@@ -1137,7 +1210,7 @@ applyTexts();
 renderLoading();
 const slowTimer = setTimeout(() => { const el = $('loading-text'); if (el) el.textContent = T().loadingSlow; }, 4000);
 recognise();
-call('getData').then(data => { apply(data); state.me ? maybeAskPhoto() : maybeAskWho(); }).catch(err => {
+call('getData').then(data => { apply(data); state.me ? maybeAskPhoto() : maybeAskLogin(); }).catch(err => {
   $('people').innerHTML = `<div class="error">${esc(T().loadError)} ${esc(errMsg(err))}</div>`;
   $('sessions').innerHTML = '';
 }).finally(() => { clearTimeout(slowTimer); $('people').removeAttribute('aria-busy'); });
@@ -1157,17 +1230,19 @@ function demo(fn, ...args) {
     };
   }
   const db = demo.db;
+  const actor = (k) => { const p = db.people.find(x => x.key === k); if (!p) throw new Error('ERR_NOT_YOU'); return p.name; };
   if (fn === 'getNow') return { now: Object.fromEntries(db.people.filter(p => p.freeUntil).map(p => [p.name, p.freeUntil])) };
   if (fn === 'setFreeNow') {
-    const p = db.people.find(x => x.name === args[0]);
+    const p = db.people.find(x => x.name === actor(args[0]));
     p.freeUntil = args[1] ? new Date(Date.now() + args[1] * 60000).toISOString() : '';
     return { now: Object.fromEntries(db.people.filter(x => x.freeUntil).map(x => [x.name, x.freeUntil])) };
   }
-  if (fn === 'whoAmI') { const p = db.people.find(x => x.key === args[0]); return p ? { name: p.name } : null; }
-  if (fn === 'sendMyLink') return { sent: true };
+  if (fn === 'whoAmI') { const p = db.people.find(x => x.key === args[0]); return p ? { name: p.name, key: p.key } : null; }
+  if (fn === 'requestLink') return { sent: true };
+  if (fn === 'signIn') return { name: 'Luca Bianchi', key: 'demoluca' };
   if (fn === 'uploadPhoto') { const p = db.people.find(x => x.key === args[0]); if (!p) throw new Error('ERR_NOT_YOU'); p.photo = args[1]; }
   if (fn === 'createBooking') {
-    const b = args[0];
+    const b = { ...args[0], by: actor(args[0].key) }; delete b.key;
     if (db.bookings.some(x => x.date === b.date && x.time === b.time && [x.by, x.with].some(n => n === b.by || n === b.with)))
       throw new Error(['ERR_CLASH', b.by, b.with, b.time].join('|'));
     db.bookings.push({ id: String(Date.now()), status: 'proposed', confirmedBy: [], ...b });
@@ -1175,7 +1250,8 @@ function demo(fn, ...args) {
   }
   if (fn === 'confirmBooking') {
     const b = db.bookings.find(x => x.id === args[0]);
-    if (!b.confirmedBy.includes(args[1])) b.confirmedBy.push(args[1]);
+    const who = actor(args[1]);
+    if (!b.confirmedBy.includes(who)) b.confirmedBy.push(who);
     if ([b.with, b.third].filter(Boolean).every(n => b.confirmedBy.includes(n))) {
       b.status = 'confirmed';
       return { ...JSON.parse(JSON.stringify(db)), scheduled: true, meet: b.format !== 'In person' };
