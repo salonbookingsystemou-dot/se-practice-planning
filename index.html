@@ -408,6 +408,8 @@ const STR = {
       ERR_THIRD: 'Il terzo partecipante deve essere una persona diversa.',
       ERR_NOT_YOU: 'Il tuo link personale non è valido: chiedine uno nuovo.', ERR_PHOTO: 'La foto non è valida o è troppo grande.',
       ERR_NO_EMAIL: 'Nessuna email registrata per questo nome.',
+      ERR_SETUP: 'L\'invio delle email non è ancora attivo. Avvisa chi gestisce l\'app e riprova più tardi.',
+      ERR_NETWORK: 'Connessione non riuscita. Controlla la rete e riprova.', ERR_GENERIC: 'Qualcosa non ha funzionato. Riprova tra poco.',
       ERR_DATE: 'Scegli una data.', ERR_TIME: 'Scegli un orario.', ERR_PAST: 'La data è già passata.',
       ERR_CLASH: (a, b, t) => `${a} e ${b} hanno già una sessione alle ${t} quel giorno.`,
       ERR_ONLY_INVITED: 'Solo la persona invitata può confermare.',
@@ -480,6 +482,8 @@ const STR = {
       ERR_THIRD: 'The third person must be someone else.',
       ERR_NOT_YOU: 'Your personal link is not valid: ask for a new one.', ERR_PHOTO: 'The photo is not valid or is too large.',
       ERR_NO_EMAIL: 'No email registered for this name.',
+      ERR_SETUP: 'Email sending is not active yet. Let the app organiser know and try again later.',
+      ERR_NETWORK: 'Connection failed. Check your network and try again.', ERR_GENERIC: 'Something went wrong. Please try again shortly.',
       ERR_DATE: 'Choose a date.', ERR_TIME: 'Choose a time.', ERR_PAST: 'The date is in the past.',
       ERR_CLASH: (a, b, t) => `${a} and ${b} already have a session at ${t} that day.`,
       ERR_ONLY_INVITED: 'Only the invited person can confirm.',
@@ -522,8 +526,11 @@ const dayLabel = (v) => { const i = dayIdx(v); return i < 0 ? v : T().days[i]; }
 const slotLabel = (v) => { const i = slotIdx(v); return i < 0 ? v : T().slots[i]; };
 
 function errMsg(err) {
-  const m = String(err && err.message || err).match(/ERR_[A-Z_]+(\|[^\n]*)?/);
-  if (!m) return String(err && err.message || err);
+  const raw = String(err && err.message || err);
+  console.error(raw);   // full technical detail stays in the console
+  const m = raw.match(/ERR_[A-Z_]+(\|[^\n]*)?/);
+  if (!m) return /permission|authoriz|autorizz/i.test(raw) ? T().err.ERR_SETUP
+               : /fetch|network|Failed|HTTP/i.test(raw) ? T().err.ERR_NETWORK : T().err.ERR_GENERIC;
   const [code, ...args] = m[0].split('|');
   const e = T().err[code];
   return typeof e === 'function' ? e(...args) : (e || code);
