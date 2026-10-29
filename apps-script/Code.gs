@@ -17,7 +17,9 @@ const CONFIG = {
   MIN_GAP_MINUTES: 90,        // a person can't have two sessions closer than this
   SEND_EMAILS: true,
   CREATE_MEET: true,          // when everyone has confirmed: calendar event + Google Meet link (needs the Calendar service, see ISTRUZIONI)
-  SESSION_MINUTES: 90,        // length of the calendar event          // email notifications for proposals, confirmations and cancellations
+  SESSION_MINUTES: 90,
+  BACKUP_FOLDER: 'SE Practice · backup',   // Drive folder for the nightly .xlsx copies
+  BACKUP_KEEP: 30,            // how many backups to keep        // length of the calendar event          // email notifications for proposals, confirmations and cancellations
   SENDER_NAME: 'SE Practice Partners',
 };
 
@@ -592,6 +594,46 @@ function esc_(s) {
 /* Run once from the editor to authorize email sending and check the setup. */
 function testEmail() {
   MailApp.sendEmail(Session.getActiveUser().getEmail(), 'SE Practice Partners · test', 'Email notifications are working.');
+}
+
+/* ---------- Nightly backup ----------
+   Run installBackup() once from the editor: it schedules backupNow() every night at about 3:00 and makes a first copy.
+   The copy is an .xlsx export (copying a form-linked spreadsheet would also duplicate the form). */
+
+function installBackup() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'backupNow') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('backupNow').timeBased().everyDays(1).atHour(3).inTimezone(CONFIG.TIMEZONE).create();
+  return backupNow();
+}
+
+function backupNow() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=xlsx';
+  const res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error('Backup failed: HTTP ' + res.getResponseCode());
+  const name = ss.getName() + ' · backup ' + Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd HH.mm') + '.xlsx';
+  const folder = backupFolder_();
+  const file = folder.createFile(res.getBlob().setName(name));
+
+  // Keep only the most recent BACKUP_KEEP copies (older ones go to the Drive bin, recoverable for 30 days)
+  const files = [];
+  const it = folder.getFiles();
+  while (it.hasNext()) files.push(it.next());
+  files.sort(function (a, b) { return b.getDateCreated() - a.getDateCreated(); });
+  files.slice(CONFIG.BACKUP_KEEP).forEach(function (f) { f.setTrashed(true); });
+  console.log('Backup saved: ' + file.getName() + ' · ' + file.getUrl());
+  return file.getUrl();
+}
+
+function backupFolder_() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('BACKUP_FOLDER_ID');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) { /* deleted: create it again */ } }
+  const folder = DriveApp.createFolder(CONFIG.BACKUP_FOLDER);
+  props.setProperty('BACKUP_FOLDER_ID', folder.getId());
+  return folder;
 }
 
 /* ---------- Sheets ---------- */

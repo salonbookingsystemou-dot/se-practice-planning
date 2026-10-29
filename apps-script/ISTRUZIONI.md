@@ -81,6 +81,13 @@ Il link Meet arriva solo via email: non compare nella pagina.
 e pubblica una **Nuova versione**. Senza il servizio, la conferma funziona lo stesso ma senza link Meet.
 Per spegnere: `CREATE_MEET: false`.
 
+## Sicurezza del foglio e backup
+- Il foglio **non va condiviso** con gli studenti: l'app passa dal motore, che lavora con il tuo account.
+  **Condividi → Accesso generale → Con restrizioni** e nessun editor oltre a te.
+- **Backup automatico:** in Apps Script esegui una volta `installBackup`. Ogni notte verso le 3 salva una copia `.xlsx`
+  nella cartella Drive «SE Practice · backup» e tiene le ultime 30 (`BACKUP_KEEP`). Backup al volo: esegui `backupNow`.
+- Per tornare indietro di poche ore c'è anche **File → Cronologia versioni** del foglio.
+
 ## Prova senza dati veri
 Apri `index.html` dal computer, oppure `se-practice.mnesti.it/?demo`: usa dati di esempio e non scrive nulla.
 
