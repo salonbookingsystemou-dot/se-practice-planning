@@ -99,5 +99,6 @@ Per spegnere: `CREATE_MEET: false`.
 Apri `index.html` dal computer, oppure `se-practice.mnesti.it/?demo`: usa dati di esempio e non scrive nulla.
 
 ## Da sapere
-- Non c'è accesso con password: chi ha il link può prenotare a nome di altri. Non diffondere il link fuori dal gruppo.
+- Si agisce solo dopo l'accesso (Google o link personale): nessuno può proporre o confermare a nome di altri.
+- La schermata di consenso OAuth nella console Google va **pubblicata** («In produzione»): in modalità Test solo gli utenti di prova possono accedere con Google.
 - Il numero di telefono compare solo se la persona l'ha inserito (link diretto a WhatsApp).
