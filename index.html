@@ -162,6 +162,12 @@
   .sk-line { height: 12px; }
   .sk-grid { height: 92px; border-radius: 8px; }
   .sk-btn { height: 34px; width: 150px; border-radius: var(--r-md); margin-left: auto; }
+  /* Busy buttons: spinner + text, the rest of the form locked */
+  .btn.is-busy { position: relative; pointer-events: none; opacity: 1; display: inline-flex; align-items: center; gap: 8px; }
+  .btn.is-busy::before { content: ''; width: 15px; height: 15px; border-radius: 50%; flex-shrink: 0;
+    border: 2px solid currentColor; border-right-color: transparent; animation: spin .7s linear infinite; }
+  form.is-busy .field, form.is-busy .btn-ghost { opacity: .55; pointer-events: none; }
+  .busy-note { font-size: 13px; color: var(--muted); margin: 0; display: flex; align-items: center; gap: 8px; min-height: 18px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
   @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } .sk { animation: none; } }
@@ -202,6 +208,8 @@
   .switch input:checked + .track { background: var(--ochre); }
   .switch input:checked + .track::after { transform: translateX(18px); }
   .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .free-row.is-saving .track::after { animation: pulse 1s ease-in-out infinite; }
+  .free-row.is-saving { opacity: .8; }
   .free-row select { width: auto; min-height: 34px; padding: 4px 8px; font-size: 13px; }
   .free-row .until { font-size: 12px; color: var(--ochre-ink); margin-left: auto; }
   .chip-now { display: inline-flex; align-items: center; gap: 6px; }
@@ -313,6 +321,7 @@
     <div class="field"><label for="b-format" data-i18n="format"></label><select id="b-format"></select></div>
     <div class="field"><label for="b-note" data-i18n="note"></label>
       <textarea id="b-note" rows="2" maxlength="300" data-i18n-ph="notePh"></textarea></div>
+    <p class="busy-note" id="b-busy" role="status" aria-live="polite"></p>
     <p class="form-error" id="b-error" role="alert"></p>
     <div class="dlg-actions">
       <button type="button" class="btn btn-ghost" id="b-cancel" data-i18n="cancel"></button>
@@ -431,6 +440,9 @@ const STR = {
     inItaly: (t) => `${t} in Italia`, italyTime: 'ora italiana', yourTime: (t) => `da te alle ${t}`,
     tzBadge: (c, h) => `🌍 ${c} · ${h} rispetto all'Italia`, slotsLocal: (n) => `Le fasce di ${n} sono nella sua ora locale.`,
     localTimeHint: (c) => `Data e ora nel tuo fuso (${c}).`,
+    busySending: 'Invio…', busySaving: 'Salvo…', busyConfirming: 'Confermo…', busyCancelling: 'Annullo…',
+    busyStep1: 'Salvo la proposta…', busyStep2: 'Avviso i partecipanti via email…', busyStep3: 'Quasi fatto, ancora un istante…',
+    busyMeet: 'Creo l\'evento e il link Google Meet…',
     proposeNow: 'Proponi adesso', signInToPropose: 'Accedi per proporre',
     nowNeedsLogin: 'Chi è libero adesso lo vedono solo i compagni che hanno fatto l\'accesso.', freeOnToast: (t) => `Gli altri ti vedono libero/a fino alle ${t}.`, freeOffToast: 'Non risulti più libero/a.',
     noFreeNow: 'In questo momento nessuno si è segnato come libero.',
@@ -523,6 +535,9 @@ const STR = {
     inItaly: (t) => `${t} in Italy`, italyTime: 'Italian time', yourTime: (t) => `${t} your time`,
     tzBadge: (c, h) => `🌍 ${c} · ${h} vs Italy`, slotsLocal: (n) => `${n}'s time slots are in their local time.`,
     localTimeHint: (c) => `Date and time in your time zone (${c}).`,
+    busySending: 'Sending…', busySaving: 'Saving…', busyConfirming: 'Confirming…', busyCancelling: 'Cancelling…',
+    busyStep1: 'Saving the proposal…', busyStep2: 'Emailing the participants…', busyStep3: 'Almost done, one moment…',
+    busyMeet: 'Creating the event and the Google Meet link…',
     proposeNow: 'Propose now', signInToPropose: 'Sign in to propose',
     nowNeedsLogin: 'Only signed-in classmates can see who is free right now.', freeOnToast: (t) => `Others see you as free until ${t}.`, freeOffToast: 'You no longer show as free.',
     noFreeNow: 'Nobody has marked themselves as free right now.',
@@ -621,7 +636,7 @@ const FORM_URL = 'https://forms.gle/Je4gaWUF94cij7Vb8';   // Google Form for ava
 const USE_SAMPLE = location.protocol === 'file:' || /[?&]demo\b/.test(location.search);
 
 async function call(fn, ...args) {
-  if (USE_SAMPLE) return demo(fn, ...args);
+  if (USE_SAMPLE) { if (fn !== 'getData' && fn !== 'getNow') await new Promise(r => setTimeout(r, 2500)); return demo(fn, ...args); }
   const res = fn === 'getData' && !args[0]
     ? await fetch(API_URL + '?fn=getData', { cache: 'no-store' })
     : await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -716,6 +731,24 @@ function waInvite(b, to) {
   return base ? base + '?text=' + encodeURIComponent(inviteText(b, to)) : '';
 }
 const asList = (x) => Array.isArray(x) ? x : (x ? [x] : []);
+
+/* Turns a button into a loader until done() is called; optional status line with messages that change over time */
+function busy(btn, label, noteEl, steps) {
+  const before = btn.innerHTML, width = btn.offsetWidth;
+  btn.classList.add('is-busy'); btn.disabled = true; btn.setAttribute('aria-busy', 'true');
+  btn.style.minWidth = width + 'px';
+  btn.textContent = label;
+  const form = btn.closest('form'); if (form) form.classList.add('is-busy');
+  const timers = [];
+  if (noteEl && steps) steps.forEach(([ms, text]) => timers.push(setTimeout(() => { noteEl.textContent = text; }, ms)));
+  return function done() {
+    timers.forEach(clearTimeout);
+    if (noteEl) noteEl.textContent = '';
+    btn.classList.remove('is-busy'); btn.disabled = false; btn.removeAttribute('aria-busy');
+    btn.style.minWidth = ''; btn.innerHTML = before;
+    if (form) form.classList.remove('is-busy');
+  };
+}
 
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
@@ -976,20 +1009,29 @@ $('d-copy').onclick = async () => {
 $('b-with').onchange = () => { fillThird(); updateHint(); };
 $('b-third').onchange = updateHint;
 $('b-cancel').onclick = () => $('dlg').close();
+function blockEsc(e) { e.preventDefault(); }   // no closing the window while the proposal is being sent
 $('book').onsubmit = async (e) => {
   e.preventDefault();
   const input = { key: myKey(), by: state.me, with: $('b-with').value, third: $('b-third').value, date: $('b-date').value, time: $('b-time').value,
                   format: $('b-format').value, note: $('b-note').value.trim(), lang: state.lang };
   if (!input.key) { $('dlg').close(); return openLogin(T().needLogin); }
   if (input.date && input.time) Object.assign(input, localInputToRome(input.date, input.time));   // stored in Italian time
-  $('b-submit').disabled = true; $('b-error').textContent = '';
+  $('b-error').textContent = '';
+  const t = T();
+  const done = busy($('b-submit'), t.busySending, $('b-busy'),
+    [[0, t.busyStep1], [1500, t.busyStep2], [6000, t.busyStep3]]);
+  $('b-cancel').disabled = true;
+  $('dlg').addEventListener('cancel', blockEsc);
   try {
     const data = await call('createBooking', input);
     apply(data);
     showDone(input, data.emailed);
   } catch (err) {
     $('b-error').textContent = errMsg(err);
-  } finally { $('b-submit').disabled = false; }
+  } finally {
+    done(); $('b-cancel').disabled = false;
+    $('dlg').removeEventListener('cancel', blockEsc);
+  }
 };
 
 /* ---------- Events ---------- */
@@ -1090,6 +1132,8 @@ async function setFree(on) {
   renderPeople();
   try {
     if (!myKey()) { renderPeople(); return openLogin(T().needLogin); }
+    document.querySelectorAll('[data-free], [data-free-mins]').forEach(x => { x.disabled = true; });
+    document.querySelectorAll('.free-row').forEach(x => x.classList.add('is-saving'));
     const res = await call('setFreeNow', myKey(), mins);
     applyNow(res.now); renderPeople();
     toast(on ? t.freeOnToast(hhmm(new Date(meP().freeUntil))) : t.freeOffToast);
@@ -1165,10 +1209,10 @@ function maybeAskLogin() {
 $('link-form').onsubmit = async (e) => {
   e.preventDefault();
   const email = $('link-email').value.trim();
-  $('link-send').disabled = true;
+  const done = busy($('link-send'), T().busySending);
   try { await call('requestLink', email, state.lang); showLoginMsg(T().linkSent(email)); }
   catch (err) { showLoginMsg(errMsg(err)); }
-  finally { $('link-send').disabled = false; }
+  finally { done(); }
 };
 $('login-skip').onclick = () => { try { sessionStorage.setItem('se-login-skip', '1'); } catch (e) {} $('login-dlg').close(); };
 document.addEventListener('click', (e) => {
@@ -1240,9 +1284,10 @@ $('ph-gallery').onchange = onPick;
 $('ph-later').onclick = () => { try { localStorage.setItem('se-photo-later', String(Date.now())); } catch (e) {} $('photo-dlg').close(); };
 $('ph-save').onclick = async () => {
   if (!photo.data) return;
-  $('ph-save').disabled = true; $('ph-error').textContent = '';
-  try { apply(await call('uploadPhoto', myKey(), photo.data)); $('photo-dlg').close(); toast(T().phSaved); }
-  catch (err) { $('ph-error').textContent = errMsg(err); $('ph-save').disabled = false; }
+  $('ph-error').textContent = '';
+  const done = busy($('ph-save'), T().busySaving);
+  try { apply(await call('uploadPhoto', myKey(), photo.data)); done(); $('photo-dlg').close(); toast(T().phSaved); }
+  catch (err) { done(); $('ph-error').textContent = errMsg(err); }
 };
 
 document.addEventListener('click', async (e) => {
@@ -1252,19 +1297,27 @@ document.addEventListener('click', async (e) => {
   if (el.dataset.book) return openBooking(el.dataset.book, !!el.dataset.now);
   const t = T();
   if (!myKey()) return openLogin(t.needLogin);
-  el.disabled = true;
+  if (el.dataset.cancel && !confirm(t.cancelAsk)) return;
+  const row = el.closest('.session');
+  if (row) row.querySelectorAll('.actions .btn').forEach(b => { if (b !== el) b.disabled = true; });
+  const done = busy(el, el.dataset.confirm ? t.busyConfirming : t.busyCancelling);
+  // the last confirmation also creates the calendar event: say so if it takes a while
+  const slow = el.dataset.confirm ? setTimeout(() => toast(t.busyMeet), 2500) : 0;
   try {
     if (el.dataset.confirm) {
-      const d = await call('confirmBooking', el.dataset.confirm, myKey(), state.lang); apply(d);
+      const d = await call('confirmBooking', el.dataset.confirm, myKey(), state.lang); clearTimeout(slow); apply(d);
       toast(d.scheduled ? (d.meet ? t.scheduledMeet : t.scheduledNoMeet)
             : asList(d.emailed).length ? t.emailedConfirm(joinNames(asList(d.emailed).map(first))) : t.confirmedToast);
     }
-    if (el.dataset.cancel && confirm(t.cancelAsk)) {
+    if (el.dataset.cancel) {
       const d = await call('cancelBooking', el.dataset.cancel, myKey(), state.lang); apply(d);
       toast(asList(d.emailed).length ? t.emailedCancel(joinNames(asList(d.emailed).map(first))) : t.cancelledToast);
     }
   } catch (err) { toast(errMsg(err)); }
-  finally { el.disabled = false; }
+  finally {
+    clearTimeout(slow);
+    if (document.body.contains(el)) { done(); if (row) row.querySelectorAll('.actions .btn').forEach(b => { b.disabled = false; }); }
+  }
 });
 
 function renderLoading() {
