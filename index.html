@@ -215,6 +215,15 @@
   .chip-now { display: inline-flex; align-items: center; gap: 6px; }
   .chip-now .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ochre); }
   @media (prefers-reduced-motion: reduce) { .free-badge .dot { animation: none; } .switch .track, .switch .track::after { transition: none; } }
+  .online-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink);
+                 background: var(--surface); border: 1px solid var(--border); border-radius: 99px; padding: 5px 11px; cursor: pointer; position: relative; }
+  .online-dot { width: 8px; height: 8px; border-radius: 50%; background: #2E9E5B; box-shadow: 0 0 0 3px rgba(46,158,91,.18); flex-shrink: 0; }
+  .online-list { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 200px; max-width: 280px; text-align: left;
+                 background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px;
+                 box-shadow: 0 10px 30px rgba(61,61,61,.15); font-weight: 400; display: grid; gap: 6px; }
+  .online-list .row { display: flex; align-items: center; gap: 8px; }
+  .av-wrap { position: relative; display: inline-flex; flex-shrink: 0; }
+  .av-wrap .online-dot { position: absolute; right: 0; bottom: 1px; width: 12px; height: 12px; border: 2px solid var(--surface); box-shadow: none; }
   .account { display: flex; align-items: center; gap: 10px; justify-content: flex-end; min-height: 44px; }
   .account .who-mini { display: flex; align-items: center; gap: 10px; font-weight: 600; }
   .account .avatar, .account .avatar.photo { width: 36px; height: 36px; font-size: 13px; }
@@ -440,6 +449,7 @@ const STR = {
     inItaly: (t) => `${t} in Italia`, italyTime: 'ora italiana', yourTime: (t) => `da te alle ${t}`,
     tzBadge: (c, h) => `🌍 ${c} · ${h} rispetto all'Italia`, slotsLocal: (n) => `Le fasce di ${n} sono nella sua ora locale.`,
     localTimeHint: (c) => `Data e ora nel tuo fuso (${c}).`,
+    online: (n) => `${n} ${n === 1 ? 'connesso' : 'connessi'}`, onlineNow: 'Online adesso', onlineYou: 'tu',
     busySending: 'Invio…', busySaving: 'Salvo…', busyConfirming: 'Confermo…', busyCancelling: 'Annullo…',
     busyStep1: 'Salvo la proposta…', busyStep2: 'Avviso i partecipanti via email…', busyStep3: 'Quasi fatto, ancora un istante…',
     busyMeet: 'Creo l\'evento e il link Google Meet…',
@@ -535,6 +545,7 @@ const STR = {
     inItaly: (t) => `${t} in Italy`, italyTime: 'Italian time', yourTime: (t) => `${t} your time`,
     tzBadge: (c, h) => `🌍 ${c} · ${h} vs Italy`, slotsLocal: (n) => `${n}'s time slots are in their local time.`,
     localTimeHint: (c) => `Date and time in your time zone (${c}).`,
+    online: (n) => `${n} online`, onlineNow: 'Online now', onlineYou: 'you',
     busySending: 'Sending…', busySaving: 'Saving…', busyConfirming: 'Confirming…', busyCancelling: 'Cancelling…',
     busyStep1: 'Saving the proposal…', busyStep2: 'Emailing the participants…', busyStep3: 'Almost done, one moment…',
     busyMeet: 'Creating the event and the Google Meet link…',
@@ -684,6 +695,7 @@ const iAmAbroad = () => zoneDiffH(MY_TZ) !== 0;
 const cityOf = (tz) => tz.split('/').pop().replace(/_/g, ' ');
 const signedH = (h) => (h > 0 ? '+' : h < 0 ? '−' : '±') + Math.abs(h).toString().replace('.5', ',5') + ' h';
 
+const isConnected = (name) => !!(state.online && state.online.includes(name));
 const freeUntil = (p) => p && p.freeUntil && new Date(p.freeUntil).getTime() > Date.now() ? new Date(p.freeUntil) : null;
 const hhmm = (d) => d.toLocaleTimeString(T().locale, { hour: '2-digit', minute: '2-digit' });
 
@@ -810,11 +822,14 @@ function buildChips(id, label, items, prop) {
 /* ---------- Render ---------- */
 function renderMe() {
   const t = T(), p = meP();
-  $('account').innerHTML = state.me
+  const n = (state.online || []).length;
+  const chip = state.me && n ? `<button type="button" class="online-chip" id="online-chip" aria-expanded="false">
+      <span class="online-dot" aria-hidden="true"></span>${esc(t.online(n))}</button>` : '';
+  $('account').innerHTML = chip + (state.me
     ? `<span class="who-mini">${p && p.photo ? `<img class="avatar photo" src="${esc(p.photo)}" alt="">`
         : `<span class="avatar" style="background:${tone(state.me)}" aria-hidden="true">${esc(initials(state.me))}</span>`}${esc(t.hello(first(state.me)))}</span>
        <button type="button" class="btn-text" id="sign-out">${esc(t.signOut)}</button>`
-    : `<button type="button" class="btn" id="sign-in">${esc(t.signIn)}</button>`;
+    : `<button type="button" class="btn" id="sign-in">${esc(t.signIn)}</button>`);
   $('legend').hidden = !meP();
   const url = state.formUrl;
   $('cta').hidden = !url || !!meP();
@@ -872,7 +887,9 @@ function renderPeople() {
           const av = p.photo
             ? `<img class="avatar photo" src="${esc(p.photo)}" alt="" loading="lazy">`
             : `<div class="avatar" style="background:${tone(p.name)}" aria-hidden="true">${esc(initials(p.name))}</div>`;
-          return isMe ? `<button type="button" class="avatar-btn" data-photo="1" aria-label="${esc(t.phTitle)}">${av}</button>` : av;
+          const dot = isConnected(p.name) ? `<span class="online-dot" title="${esc(t.onlineNow)}" aria-label="${esc(t.onlineNow)}"></span>` : '';
+          const wrapped = `<span class="av-wrap">${av}${dot}</span>`;
+          return isMe ? `<button type="button" class="avatar-btn" data-photo="1" aria-label="${esc(t.phTitle)}">${wrapped}</button>` : wrapped;
         })()}
         <div><h3>${esc(p.name)}${isMe ? ` <span class="badge">${esc(t.you)}</span>` : ''}${isMe && !p.photo ? ` <button type="button" class="add-photo" data-photo="1">${esc(t.addPhoto)}</button>` : ''}</h3><p>${esc(p.region || '—')}</p></div>
       </div>
@@ -1039,7 +1056,7 @@ function setSession(sess, greet) {
   state.session = sess; state.me = sess ? sess.name : '';
   try { sess ? localStorage.setItem('se-session', JSON.stringify(sess)) : localStorage.removeItem('se-session'); localStorage.removeItem('se-key'); } catch (e) {}
   state.tzSent = false;
-  if (!sess) state.people.forEach(p => { delete p.freeUntil; });   // signed out: no more "free now" info
+  if (!sess) { state.people.forEach(p => { delete p.freeUntil; }); state.online = []; }   // signed out: no more "free now" info
   render();
   if (sess) {
     if (greet) toast(T().welcome(first(sess.name)));
@@ -1068,7 +1085,7 @@ function sendMyZone() {
   if ((p.tz || '') !== mine) call('setTimeZone', myKey(), MY_TZ).then(() => { p.tz = mine; renderPeople(); }).catch(() => {});
 }
 function apply(data) {
-  state.people = data.people; state.bookings = data.bookings; state.today = data.today;
+  state.people = data.people; state.bookings = data.bookings; state.today = data.today; state.online = data.online || [];
   state.formUrl = FORM_URL || data.formUrl || ''; state.appUrl = data.appUrl || '';
   render();
   sendMyZone();
@@ -1121,6 +1138,12 @@ $('f-now').onclick = () => {
   state.nowOnly = !state.nowOnly; renderPeople();
 };
 
+function applyOnline(list) {
+  const next = Array.isArray(list) ? list : [];
+  const changed = JSON.stringify(next) !== JSON.stringify(state.online || []);
+  state.online = next;
+  if (changed) renderMe();
+}
 function applyNow(now) {
   state.people.forEach(p => { if (now[p.name]) p.freeUntil = now[p.name]; else delete p.freeUntil; });
 }
@@ -1152,12 +1175,17 @@ try { state.freeMins = Number(localStorage.getItem('se-free-mins')) || 60; } cat
 /* Every minute, while the page is visible: refresh who is free (a very small request) and drop expired switches */
 setInterval(async () => {
   if (document.visibilityState !== 'visible' || !state.people.length) return;
-  try { applyNow((await call('getNow', myKey())).now); } catch (e) { /* keep what we have */ }
+  try { { const r = await call('getNow', myKey()); applyNow(r.now); applyOnline(r.online); }; } catch (e) { /* keep what we have */ }
   if (!document.activeElement || !document.activeElement.matches('[data-free-mins]')) renderPeople();
 }, 60000);
+/* Closing the page: tell the engine right away instead of waiting for the 2.5-minute timeout */
+window.addEventListener('pagehide', () => {
+  if (!myKey() || USE_SAMPLE) return;
+  try { navigator.sendBeacon(API_URL, new Blob([JSON.stringify({ fn: 'leave', args: [myKey()] })], { type: 'text/plain;charset=utf-8' })); } catch (e) {}
+});
 document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState === 'visible' && state.people.length) {
-    try { applyNow((await call('getNow', myKey())).now); renderPeople(); } catch (e) {}
+    try { { const r = await call('getNow', myKey()); applyNow(r.now); applyOnline(r.online); }; renderPeople(); } catch (e) {}
   }
 });
 
@@ -1217,6 +1245,15 @@ $('link-form').onsubmit = async (e) => {
 $('login-skip').onclick = () => { try { sessionStorage.setItem('se-login-skip', '1'); } catch (e) {} $('login-dlg').close(); };
 document.addEventListener('click', (e) => {
   if (e.target.closest('#sign-in')) openLogin();
+  const chip = e.target.closest('#online-chip');
+  document.querySelectorAll('.online-list').forEach(x => x.remove());
+  if (chip && chip.getAttribute('aria-expanded') !== 'true') {
+    const t = T();
+    const box = document.createElement('div'); box.className = 'online-list'; box.setAttribute('role', 'dialog');
+    box.innerHTML = `<strong>${esc(t.onlineNow)}</strong>` + (state.online || []).map(n =>
+      `<span class="row"><span class="online-dot" aria-hidden="true"></span>${esc(n)}${key(n) === key(state.me) ? ` <span class="badge">${esc(t.onlineYou)}</span>` : ''}</span>`).join('');
+    chip.appendChild(box); chip.setAttribute('aria-expanded', 'true');
+  } else document.querySelectorAll('#online-chip').forEach(c => c.setAttribute('aria-expanded', 'false'));
   if (e.target.closest('[data-login]')) openLogin(T().needLogin);
   if (e.target.closest('#sign-out')) signOut();
 });
@@ -1359,8 +1396,10 @@ function demo(fn, ...args) {
   }
   const db = demo.db;
   const actor = (k) => { const p = db.people.find(x => x.key === k); if (!p) throw new Error('ERR_NOT_YOU'); return p.name; };
-  if (fn === 'getNow') return { now: args[0] ? Object.fromEntries(db.people.filter(p => p.freeUntil).map(p => [p.name, p.freeUntil])) : {} };
+  if (fn === 'leave') return { ok: true };
+  if (fn === 'getNow') return { online: args[0] ? ['Anna Rossi', 'Luca Bianchi'] : [], now: args[0] ? Object.fromEntries(db.people.filter(p => p.freeUntil).map(p => [p.name, p.freeUntil])) : {} };
   if (fn === 'getData' && !args[0]) { const c = JSON.parse(JSON.stringify(db)); c.people.forEach(p => delete p.freeUntil); return c; }
+  if (fn === 'getData') return { ...JSON.parse(JSON.stringify(db)), online: ['Anna Rossi', 'Luca Bianchi'] };
   if (fn === 'setFreeNow') {
     const p = db.people.find(x => x.name === actor(args[0]));
     p.freeUntil = args[1] ? new Date(Date.now() + args[1] * 60000).toISOString() : '';

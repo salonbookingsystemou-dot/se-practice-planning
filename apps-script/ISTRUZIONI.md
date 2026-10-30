@@ -72,6 +72,11 @@ Nella propria card c'è uno switch con una durata (30 min, 1, 2 o 3 ore): finch�
 compare tra i «Liberi ora» e gli altri hanno il pulsante «Proponi adesso» (oggi, al prossimo quarto d'ora).
 Si spegne da solo allo scadere. La pagina aggiorna questo stato ogni minuto. I dati stanno nel foglio «Now».
 
+## Chi è connesso
+In alto «● 3 connessi» (con l'elenco al clic) e un pallino verde sulla foto di chi ha la pagina aperta ed è entrato.
+Lo vedono solo gli utenti che hanno fatto l'accesso. La presenza si aggiorna ogni minuto, sparisce subito alla chiusura
+della pagina (o dopo 2,5 minuti) e sta solo nella memoria temporanea del motore: nulla viene scritto nel foglio.
+
 ## Google Meet alla conferma
 Quando **tutti** gli invitati hanno confermato, lo script crea nel tuo Google Calendar un evento (durata `SESSION_MINUTES`,
 90 minuti) con i partecipanti come invitati e, per le sessioni online, un **link Google Meet**. Poi manda a tutti

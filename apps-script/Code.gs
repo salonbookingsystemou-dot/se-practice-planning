@@ -32,7 +32,7 @@ const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time',
 
 const API = { getData: getData, createBooking: createBooking, confirmBooking: confirmBooking, cancelBooking: cancelBooking,
               whoAmI: whoAmI, signIn: signIn, requestLink: requestLink, uploadPhoto: uploadPhoto, getNow: getNow, setFreeNow: setFreeNow,
-              setTimeZone: setTimeZone, setLanguage: setLanguage };
+              setTimeZone: setTimeZone, setLanguage: setLanguage, leave: leave };
 
 function doGet(e) {
   const fn = e && e.parameter && e.parameter.fn;
@@ -67,13 +67,16 @@ function getData(k) {
     delete out.email;
     return out;
   });
-  const now = k && personByKey_(k) ? readNow_() : {};
+  const viewer = k ? personByKey_(k) : null;
+  const now = viewer ? readNow_() : {};
   const zones = readZones_();
   people.forEach(function (p) {
     if (now[p.name]) p.freeUntil = now[p.name];
     if (zones[p.name] && zones[p.name] !== CONFIG.TIMEZONE) p.tz = zones[p.name];
   });
-  return { people: people, bookings: readBookings_(), today: today_(), formUrl: CONFIG.FORM_URL, appUrl: appUrl_() };
+  const out = { people: people, bookings: readBookings_(), today: today_(), formUrl: CONFIG.FORM_URL, appUrl: appUrl_() };
+  if (viewer) { touch_(viewer); out.online = readOnline_(people); }   // presence: only for signed-in people
+  return out;
 }
 
 function appUrl_() { return CONFIG.APP_URL || ScriptApp.getService().getUrl(); }
@@ -285,8 +288,29 @@ const FREE_MINUTES = [30, 60, 120, 180];
 
 /* Polled by the page every minute: only names and end times, nothing else */
 function getNow(k) {
-  const ok = !!(k && personByKey_(k));
-  return { now: ok ? readNow_() : {}, signedIn: ok, serverTime: new Date().toISOString() };
+  const p = k ? personByKey_(k) : null;
+  if (p) touch_(p);   // the page calls this every minute: it doubles as "I'm still here"
+  return { now: p ? readNow_() : {}, online: p ? readOnline_(readPeople_()) : [], signedIn: !!p, serverTime: new Date().toISOString() };
+}
+
+/* ---------- Who is connected ----------
+   Kept in the script cache only (nothing written to the sheet): a timestamp per person, refreshed by the page every minute. */
+const ONLINE_MS = 150000;   // seen in the last 2.5 minutes = connected
+
+function touch_(p) { CacheService.getScriptCache().put('seen_' + personKey_(p.name), String(Date.now()), 600); }
+
+function readOnline_(people) {
+  const keys = people.map(function (p) { return 'seen_' + personKey_(p.name); });
+  const seen = keys.length ? CacheService.getScriptCache().getAll(keys) : {};
+  const t = Date.now();
+  return people.filter(function (p, i) { return Number(seen[keys[i]] || 0) > t - ONLINE_MS; }).map(function (p) { return p.name; });
+}
+
+/* Called when the page is closed */
+function leave(k) {
+  const p = personByKey_(k);
+  if (p) CacheService.getScriptCache().remove('seen_' + personKey_(p.name));
+  return { ok: true };
 }
 
 function setFreeNow(k, minutes) {
