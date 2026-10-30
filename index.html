@@ -1008,9 +1008,18 @@ function signOut() {
   setSession(null);
   try { google.accounts.id.disableAutoSelect(); } catch (e) {}
 }
-function setLang(l) { state.lang = l; try { localStorage.setItem('se-lang', l); } catch (e) {} applyTexts(); render(); }
+function setLang(l) { state.lang = l; try { localStorage.setItem('se-lang', l); } catch (e) {} applyTexts(); render(); sendMyLang(); }
+function sendMyLang() {
+  if (!myKey()) return;
+  var last = ''; try { last = localStorage.getItem('se-lang-sent') || ''; } catch (e) {}
+  if (last === myKey() + '|' + state.lang) return;
+  call('setLanguage', myKey(), state.lang)
+    .then(() => { try { localStorage.setItem('se-lang-sent', myKey() + '|' + state.lang); } catch (e) {} })
+    .catch(() => {});
+}
 function sendMyZone() {
   const p = meP();
+  sendMyLang();
   if (!p || !myKey() || state.tzSent) return;
   state.tzSent = true;
   const mine = MY_TZ === REF_TZ ? '' : MY_TZ;
@@ -1307,6 +1316,7 @@ function demo(fn, ...args) {
   if (fn === 'whoAmI') { const p = db.people.find(x => x.key === args[0]); return p ? { name: p.name, key: p.key } : null; }
   if (fn === 'requestLink') return { sent: true };
   if (fn === 'setTimeZone') return { tz: args[1] };
+  if (fn === 'setLanguage') return { lang: args[1] };
   if (fn === 'signIn') return { name: 'Luca Bianchi', key: 'demoluca' };
   if (fn === 'uploadPhoto') { const p = db.people.find(x => x.key === args[0]); if (!p) throw new Error('ERR_NOT_YOU'); p.photo = args[1]; }
   if (fn === 'createBooking') {

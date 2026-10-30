@@ -32,7 +32,7 @@ const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time',
 
 const API = { getData: getData, createBooking: createBooking, confirmBooking: confirmBooking, cancelBooking: cancelBooking,
               whoAmI: whoAmI, signIn: signIn, requestLink: requestLink, uploadPhoto: uploadPhoto, getNow: getNow, setFreeNow: setFreeNow,
-              setTimeZone: setTimeZone };
+              setTimeZone: setTimeZone, setLanguage: setLanguage };
 
 function doGet(e) {
   const fn = e && e.parameter && e.parameter.fn;
@@ -348,11 +348,38 @@ function setTimeZone(k, tz) {
     for (var i = 1; i < values.length; i++) {
       if (key_(values[i][0]) === key_(p.name)) { sheet.getRange(i + 1, 2).setValue(tz); return { tz: tz }; }
     }
-    sheet.appendRow([p.name, tz]);
+    sheet.appendRow([p.name, tz, '']);
     return { tz: tz };
   } finally {
     lock.releaseLock();
   }
+}
+
+/* Dashboard language of each person (column C of the Zones sheet): emails to them use it */
+function setLanguage(k, lang) {
+  const p = actor_(k);
+  if (['it', 'en'].indexOf(lang) === -1) throw new Error('ERR_BAD_REQUEST');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = zonesSheet_();
+    const values = sheet.getDataRange().getValues();
+    for (var i = 1; i < values.length; i++) {
+      if (key_(values[i][0]) === key_(p.name)) { sheet.getRange(i + 1, 3).setValue(lang); return { lang: lang }; }
+    }
+    sheet.appendRow([p.name, '', lang]);
+    return { lang: lang };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function readLangs_() {
+  const out = {};
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.ZONES_SHEET);
+  if (!sheet) return out;
+  sheet.getDataRange().getValues().slice(1).forEach(function (r) { if (r[0] && MAIL[r[2]]) out[String(r[0])] = String(r[2]); });
+  return out;
 }
 
 function readZones_() {
@@ -368,7 +395,7 @@ function zonesSheet_() {
   var sheet = ss.getSheetByName(CONFIG.ZONES_SHEET);
   if (!sheet) {
     sheet = ss.insertSheet(CONFIG.ZONES_SHEET);
-    sheet.getRange(1, 1, 1, 2).setValues([['Name', 'Time zone']]).setFontWeight('bold');
+    sheet.getRange(1, 1, 1, 3).setValues([['Name', 'Time zone', 'Language']]).setFontWeight('bold');
     sheet.setFrozenRows(1);
   }
   return sheet;
@@ -424,6 +451,7 @@ function createBooking(input) {
 
 /* Each invited person confirms for themselves; the session is "confirmed" once everyone invited has confirmed. */
 function confirmBooking(id, k, lang) {
+  lang = MAIL[lang] ? lang : 'it';
   const name = actor_(k).name;
   return withBooking_(id, function (b, row, sheet) {
     const who = invitees_(b).find(function (n) { return key_(n) === key_(name); });
@@ -436,7 +464,7 @@ function confirmBooking(id, k, lang) {
     if (!all) return { event: 'confirmed', actor: who };
     // Everyone is in: calendar event with a Meet link, then one email to all participants
     if (!b.eventId) {
-      const ev = createEvent_(b, readPeople_());
+      const ev = createEvent_(b, readPeople_(), lang);
       if (ev.eventId) { sheet.getRange(row, 12, 1, 2).setValues([[ev.meet || '', ev.eventId]]); b.meet = ev.meet || ''; b.eventId = ev.eventId; }
     }
     return { event: 'scheduled', actor: who, everyone: true };
@@ -484,15 +512,16 @@ function withBooking_(id, change, lang, k) {
    Uses the advanced "Google Calendar API" service (identifier: Calendar). Without it, the session is still
    confirmed and emailed, just without the Meet link. */
 
-function createEvent_(b, people) {
+function createEvent_(b, people, lang) {
+  const en = lang === 'en';
   if (!CONFIG.CREATE_MEET || typeof Calendar === 'undefined') return {};
   try {
     const find = function (n) { return people.find(function (p) { return key_(p.name) === key_(n); }) || {}; };
     const emails = participants_(b).map(function (n) { return find(n).email; }).filter(Boolean);
     const online = b.format !== 'In person';
     const resource = {
-      summary: 'Pratica SE · ' + participants_(b).join(', '),
-      description: (b.note ? b.note + '\n\n' : '') + 'Organizzata con SE Practice Partners · ' + appUrl_(),
+      summary: (en ? 'SE practice · ' : 'Pratica SE · ') + participants_(b).join(', '),
+      description: (b.note ? b.note + '\n\n' : '') + (en ? 'Organised with SE Practice Partners · ' : 'Organizzata con SE Practice Partners · ') + appUrl_(),
       start: { dateTime: localDateTime_(b.date, b.time, 0), timeZone: CONFIG.TIMEZONE },
       end: { dateTime: localDateTime_(b.date, b.time, CONFIG.SESSION_MINUTES), timeZone: CONFIG.TIMEZONE },
       attendees: emails.map(function (e) { return { email: e }; }),
@@ -573,23 +602,25 @@ const MAIL = {
    proposed → everyone invited · confirmed → everyone except the person confirming · cancelled → everyone except who cancelled */
 function notify_(event, b, people, lang, actor, everyone) {
   if (!CONFIG.SEND_EMAILS) return [];
-  const t = MAIL[lang] || MAIL.it;
-  const tpl = t[event];
   const find = function (n) { return people.find(function (p) { return key_(p.name) === key_(n); }) || { name: n }; };
   const first = function (n) { return String(n).split(/\s+/)[0]; };
   const zones = readZones_();
+  const langs = readLangs_();
   const abroad = all_(b).some(function (n) { return zones[n] && zones[n] !== CONFIG.TIMEZONE; });
-  const joinNames = function (list) {
-    return list.length < 2 ? list.join('') : list.slice(0, -1).join(', ') + ' ' + t.labels.and + ' ' + list[list.length - 1];
-  };
   const all = participants_(b);
   const recipients = everyone ? all : all.filter(function (n) { return key_(n) !== key_(actor); });
   const actorP = find(actor);
-  const d = dateLabel_(b.date, t.locale);
   const sent = [];
 
   recipients.forEach(function (name) {
     try {
+      // the language this person uses on the dashboard; otherwise the one of whoever acted
+      const t = MAIL[langs[name]] || MAIL[lang] || MAIL.it;
+      const tpl = t[event];
+      const joinNames = function (list) {
+        return list.length < 2 ? list.join('') : list.slice(0, -1).join(', ') + ' ' + t.labels.and + ' ' + list[list.length - 1];
+      };
+      const d = dateLabel_(b.date, t.locale);
       const to = find(name);
       if (!to.email || MailApp.getRemainingDailyQuota() < 1) return;
       const others = event === 'proposed' ? all.filter(function (n) { return n !== actor && n !== name; }) : [];
