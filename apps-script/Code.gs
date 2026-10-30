@@ -439,7 +439,7 @@ function createBooking(input) {
     });
     if (clash) throw new Error(['ERR_CLASH', clash.by, clash.with, clash.time].join('|'));
 
-    bookingsSheet_().appendRow([booking.id, new Date(), booking.by, booking.with, booking.date, booking.time,
+    bookingsSheet_().appendRow([booking.id, new Date(), booking.by, booking.with, "'" + booking.date, "'" + booking.time,
       booking.format, booking.note, 'proposed', booking.third, '']);
     const data = getData(input.key);
     data.emailed = notify_('proposed', booking, people, input.lang, by);
@@ -786,5 +786,8 @@ function list_(row, i) { return cell_(row, i).split(',').map(function (s) { retu
 function key_(s) { return String(s || '').trim().toLowerCase(); }
 function today_() { return Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd'); }
 function minutes_(t) { const p = String(t).split(':'); return Number(p[0]) * 60 + Number(p[1]); }
-function asDate_(v) { return v instanceof Date ? Utilities.formatDate(v, CONFIG.TIMEZONE, 'yyyy-MM-dd') : String(v); }
-function asTime_(v) { return v instanceof Date ? Utilities.formatDate(v, CONFIG.TIMEZONE, 'HH:mm') : String(v); }
+/* Sheets may turn "2026-11-05" / "19:00" into real dates and times. Those must be read back in the SPREADSHEET's own
+   time zone: a time alone is stored on 30/12/1899, when Rome's offset was not yet a whole hour (19:00 became 20:21). */
+function sheetTz_() { return SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || CONFIG.TIMEZONE; }
+function asDate_(v) { return v instanceof Date ? Utilities.formatDate(v, sheetTz_(), 'yyyy-MM-dd') : String(v).replace(/^'/, ''); }
+function asTime_(v) { return v instanceof Date ? Utilities.formatDate(v, sheetTz_(), 'HH:mm') : String(v).replace(/^'/, ''); }
