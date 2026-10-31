@@ -13,7 +13,8 @@ const CONFIG = {
   BOOKINGS_SHEET: 'Bookings',
   PHOTOS_SHEET: 'Photos',
   NOW_SHEET: 'Now',
-  ZONES_SHEET: 'Zones',       // time zone of each person, taken from their browser when they sign in           // "free right now" switches: one row per person with the time it ends     // photos uploaded from the app (small JPEGs, one row per person)
+  ZONES_SHEET: 'Zones',
+  MAIL_LOG_SHEET: 'Mail log', // one row per email: when, type, to, subject, result       // time zone of each person, taken from their browser when they sign in           // "free right now" switches: one row per person with the time it ends     // photos uploaded from the app (small JPEGs, one row per person)
   TIMEZONE: 'Europe/Rome',
   MIN_GAP_MINUTES: 90,        // a person can't have two sessions closer than this
   SEND_EMAILS: true,
@@ -230,8 +231,8 @@ function sendLink_(p, lang) {
                   : 'Opening it, the app recognises you on that device: you can propose and confirm sessions and upload your photo. Don\'t forward it: whoever opens it acts as you.';
   const button = it ? 'Apri l\'app' : 'Open the app';
   const html = mailFrame_(lead, '<p style="margin:0 0 18px;font-size:15px">' + esc_(body) + '</p>', url, button, MAIL[it ? 'it' : 'en'].footer);
-  MailApp.sendEmail(p.email, it ? 'Il tuo link personale · SE Practice Partners' : 'Your personal link · SE Practice Partners',
-    lead + '\n\n' + body + '\n' + url, { name: CONFIG.SENDER_NAME, htmlBody: html });
+  sendLogged_('link', p.name, p.email, it ? 'Il tuo link personale · SE Practice Partners' : 'Your personal link · SE Practice Partners',
+    lead + '\n\n' + body + '\n' + url, { name: CONFIG.SENDER_NAME, htmlBody: html }, '');
   cache.put('link_' + key_(p.name), '1', 600);
   return { sent: true };
 }
@@ -532,6 +533,36 @@ function withBooking_(id, change, lang, k) {
   }
 }
 
+/* ---------- Email log ---------- */
+
+function logMail_(type, toName, toEmail, subject, result, bookingId) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(CONFIG.MAIL_LOG_SHEET);
+    if (!sheet) {
+      sheet = ss.insertSheet(CONFIG.MAIL_LOG_SHEET);
+      sheet.getRange(1, 1, 1, 7).setValues([['When', 'Type', 'To', 'Email', 'Subject', 'Result', 'Session']]).setFontWeight('bold');
+      sheet.setFrozenRows(1);
+      try { sheet.setColumnWidths(1, 7, 150); sheet.setColumnWidth(5, 340); } catch (e) { /* cosmetic only */ }
+    }
+    sheet.appendRow([new Date(), type, toName || '', toEmail || '', subject || '', result, bookingId || '']);
+  } catch (e) { console.error('Mail log not written: ' + e); }
+}
+
+/* Sends through MailApp and writes the result in the log */
+function sendLogged_(type, toName, toEmail, subject, text, opts, bookingId) {
+  if (!toEmail) { logMail_(type, toName, '', subject, 'skipped: no email', bookingId); return false; }
+  if (MailApp.getRemainingDailyQuota() < 1) { logMail_(type, toName, toEmail, subject, 'skipped: daily quota reached', bookingId); return false; }
+  try {
+    MailApp.sendEmail(toEmail, subject, text, opts);
+    logMail_(type, toName, toEmail, subject, 'sent', bookingId);
+    return true;
+  } catch (e) {
+    logMail_(type, toName, toEmail, subject, 'error: ' + e.message, bookingId);
+    throw e;
+  }
+}
+
 /* ---------- Calendar event with Google Meet ----------
    Uses the advanced "Google Calendar API" service (identifier: Calendar). Without it, the session is still
    confirmed and emailed, just without the Meet link. */
@@ -646,7 +677,7 @@ function notify_(event, b, people, lang, actor, everyone) {
       };
       const d = dateLabel_(b.date, t.locale);
       const to = find(name);
-      if (!to.email || MailApp.getRemainingDailyQuota() < 1) return;
+      if (!to.email) { logMail_(event, name, '', '', 'skipped: no email', b.id); return; }
       const others = event === 'proposed' ? all.filter(function (n) { return n !== actor && n !== name; }) : [];
       const pending = invitees_(b).filter(function (n) { return (b.confirmedBy || []).indexOf(n) === -1; });
       const v = { actor: actor, actorFirst: first(actor), others: joinNames(others), allConfirmed: !!b.allConfirmed,
@@ -677,8 +708,7 @@ function notify_(event, b, people, lang, actor, everyone) {
 
       const opts = { name: CONFIG.SENDER_NAME, htmlBody: html };
       if (actorP.email) opts.replyTo = actorP.email;   // replies go to the student who acted, not to the app owner
-      MailApp.sendEmail(to.email, tpl.subject(v), text, opts);
-      sent.push(to.name);
+      if (sendLogged_(event, to.name, to.email, tpl.subject(v), text, opts, b.id)) sent.push(to.name);
     } catch (e) {
       console.error('Email to ' + name + ' not sent: ' + e);
     }

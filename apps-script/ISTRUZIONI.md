@@ -47,6 +47,8 @@ vanno comunque confermate una volta nell'editor eseguendo `testEmail`.
 - Partono dal tuo account come «SE Practice Partners»; rispondendo si scrive all'altro studente.
 - **Lingua:** ognuno riceve le email nella lingua che usa sulla dashboard (IT/EN, salvata nel foglio «Zones»);
   chi non l'ha mai aperta le riceve nella lingua della pagina di chi propone. Anche l'evento in calendario segue la lingua.
+- **Registro:** ogni email è una riga del foglio «Mail log» (quando, tipo, destinatario, oggetto, esito: `sent`,
+  `skipped: no email`, `skipped: daily quota reached` o `error: …`). Le copie sono anche in Gmail → Posta inviata.
 - Gli indirizzi non arrivano mai alla pagina. Per spegnerle: `SEND_EMAILS: false`. Limite Gmail: circa 100 al giorno.
 
 ## Triadi
