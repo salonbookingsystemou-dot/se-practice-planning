@@ -15,7 +15,7 @@ const CONFIG = {
   ZONES_SHEET: 'Zones',       // per person: time zone, dashboard language, reminders on/off
   FEEDBACK_SHEET: 'Feedback',  // post-session comments: one row per comment
   FEEDBACK_DAYS: 90,          // sessions shown on the feedback board (days back)
-  FEEDBACK_PUBLIC: false,     // false = only the session's participants see and write its board
+  FEEDBACK_PUBLIC: true,      // true = every signed-in student reads all boards (training purpose); only participants write
   MAIL_LOG_SHEET: 'Mail log', // one row per email: when, type, to, subject, result
   TIMEZONE: 'Europe/Rome',
   MIN_GAP_MINUTES: 90,        // a person can't have two sessions closer than this
