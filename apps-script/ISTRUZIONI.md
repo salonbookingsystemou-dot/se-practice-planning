@@ -146,6 +146,13 @@ La pagina salva nel browser una copia dei dati dell'ultima visita (massimo 7 gio
 «Aggiorno i dati…» mentre arrivano quelli nuovi. Se il motore non risponde, resta visibile la copia.
 «Liberi ora» e «connessi» della copia valgono solo per la stessa persona; «Esci» cancella la copia.
 
+## Feedback post-sessione
+Tab **Feedback**: per ogni sessione confermata e conclusa (ultimi `FEEDBACK_DAYS` giorni) c'è una bacheca di commenti.
+- La vedono e ci scrivono **solo i partecipanti** di quella sessione (`FEEDBACK_PUBLIC: false`; con `true` la leggono tutti
+  gli iscritti, ma scrivono sempre solo i partecipanti). Ognuno può eliminare i propri commenti.
+- A ogni nuovo commento gli altri partecipanti ricevono un'email con il testo e il pulsante «Leggi e rispondi»,
+  che apre l'app direttamente sul tab Feedback. I commenti stanno nel foglio «Feedback».
+
 ## Prova senza dati veri
 Apri `index.html` dal computer, oppure `se-practice.mnesti.it/?demo`: usa dati di esempio e non scrive nulla.
 

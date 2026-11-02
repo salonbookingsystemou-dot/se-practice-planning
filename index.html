@@ -179,6 +179,28 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
   @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } .sk { animation: none; } }
+  .tabs { overflow-x: auto; scrollbar-width: none; }
+  .tab { white-space: nowrap; }
+  .fb-intro { color: var(--muted); font-size: 14px; margin: 0 0 18px; max-width: 70ch; }
+  .fb-session { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 18px 20px; margin-bottom: 16px; }
+  .fb-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 12px; }
+  .fb-head h3 { font: 600 17px var(--serif); color: var(--accent); margin: 0; }
+  .fb-head .meta { font-size: 13px; color: var(--muted); }
+  .fb-list { display: grid; gap: 12px; margin-bottom: 14px; }
+  .fb-empty { font-size: 14px; color: var(--muted); font-style: italic; margin: 0 0 12px; }
+  .fb-item { display: flex; gap: 10px; }
+  .fb-item .avatar, .fb-item .avatar.photo { width: 34px; height: 34px; font-size: 12px; }
+  .fb-bubble { flex: 1; min-width: 0; background: var(--surface-2); border-radius: 4px 14px 14px 14px; padding: 10px 14px; }
+  .fb-item.mine .fb-bubble { background: var(--accent-soft); }
+  .fb-meta { display: flex; gap: 8px; align-items: baseline; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .fb-meta strong { color: var(--ink); font-size: 13px; }
+  .fb-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.5; }
+  .fb-del { margin-left: auto; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 12px; padding: 0; }
+  .fb-del:hover { color: var(--danger); text-decoration: underline; }
+  .fb-form { display: grid; gap: 8px; }
+  .fb-form textarea { min-height: 70px; resize: vertical; }
+  .fb-form .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .fb-form .hint { margin: 0; }
   .empty, .loading, .error { text-align: center; padding: 48px 20px; color: var(--muted); background: var(--surface); border: 1px dashed var(--border); border-radius: var(--r-lg); }
   .error { color: var(--danger); border-style: solid; }
 
@@ -299,6 +321,7 @@
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" id="tab-people" aria-selected="true" aria-controls="panel-people"><span data-i18n="tabPeople"></span><span class="count" id="c-people">0</span></button>
     <button class="tab" role="tab" id="tab-sessions" aria-selected="false" aria-controls="panel-sessions"><span data-i18n="tabSessions"></span><span class="count" id="c-sessions">0</span></button>
+    <button class="tab" role="tab" id="tab-feedback" aria-selected="false" aria-controls="panel-feedback"><span data-i18n="tabFeedback"></span><span class="count" id="c-feedback" hidden></span></button>
   </div>
 
   <section id="panel-people" role="tabpanel" aria-labelledby="tab-people">
@@ -321,6 +344,11 @@
 
   <section id="panel-sessions" role="tabpanel" aria-labelledby="tab-sessions" hidden>
     <div id="sessions"></div>
+  </section>
+
+  <section id="panel-feedback" role="tabpanel" aria-labelledby="tab-feedback" hidden>
+    <p class="fb-intro" data-i18n="fbIntro"></p>
+    <div id="feedback"></div>
   </section>
 </div>
 
@@ -421,7 +449,13 @@ const STR = {
     ctaText: 'Inserisci le tue disponibilità in un minuto, così gli altri possono trovarti e proporti una sessione.',
     ctaButton: 'Inserisci le disponibilità →',
     updateText: 'Sono cambiati i tuoi orari?', editData: 'Modifica i tuoi dati',
-    tabPeople: 'Persone', tabSessions: 'Sessioni',
+    tabPeople: 'Persone', tabSessions: 'Sessioni', tabFeedback: 'Feedback',
+    fbIntro: 'Una bacheca per ogni sessione conclusa: com\'è andata, cosa avete notato, cosa vi portate via. La vedono solo i partecipanti di quella sessione.',
+    fbNeedLogin: 'Accedi per vedere e scrivere i feedback delle tue sessioni.', fbNone: 'Qui compariranno le tue sessioni concluse: dopo la prima potrai lasciare un feedback.',
+    fbNoComments: 'Ancora nessun commento: inizia tu.', fbPh: 'Com\'è andata? Cosa ha funzionato, cosa proveresti diversamente…',
+    fbLoading: 'Carico i feedback…', fbPost: 'Pubblica', fbPosting: 'Pubblico…', fbDelete: 'Elimina', fbDeleteAsk: 'Eliminare il tuo commento?', fbPosted: 'Feedback pubblicato.',
+    fbVisible: 'Visibile solo ai partecipanti.', fbWith: (n) => `con ${n}`,
+    ago: (m) => m < 1 ? 'adesso' : m < 60 ? `${m} min fa` : m < 1440 ? `${Math.round(m / 60)} h fa` : `${Math.round(m / 1440)} g fa`,
     search: 'Cerca per nome o città',
     fFormat: 'Formato', fDay: 'Giorno', fTime: 'Orario', filters: 'Filtri', resetFilters: 'Azzera filtri',
     legendOn: 'Disponibile', legendShared: 'Libero anche tu',
@@ -494,7 +528,7 @@ const STR = {
       ERR_PICK_TWO: 'Scegli le persone dalla lista.', ERR_SELF: 'Non puoi prenotare una sessione con te stesso.',
       ERR_THIRD: 'Il terzo partecipante deve essere una persona diversa.',
       ERR_NOT_YOU: 'Accesso scaduto o non valido: accedi di nuovo.', ERR_PHOTO: 'La foto non è valida o è troppo grande.',
-      ERR_NO_EMAIL: 'Nessuna email registrata per questo nome.', ERR_EXPIRED: 'L\'orario di questa sessione è già passato: non si può più confermare.', ERR_CANCELLED: 'Questa sessione è stata annullata.', ERR_EMAIL: 'Controlla l\'indirizzo email.',
+      ERR_NO_EMAIL: 'Nessuna email registrata per questo nome.', ERR_EMPTY: 'Scrivi qualcosa prima di pubblicare.', ERR_TOO_LONG: 'Il commento è troppo lungo (massimo 1500 caratteri).', ERR_NOT_YOURS: 'Puoi eliminare solo i tuoi commenti.', ERR_EXPIRED: 'L\'orario di questa sessione è già passato: non si può più confermare.', ERR_CANCELLED: 'Questa sessione è stata annullata.', ERR_EMAIL: 'Controlla l\'indirizzo email.',
       ERR_SIGNIN: 'Accesso con Google non riuscito. Riprova o ricevi il link via email.',
       ERR_SETUP: 'L\'invio delle email non è ancora attivo. Avvisa chi gestisce l\'app e riprova più tardi.',
       ERR_NETWORK: 'Connessione non riuscita. Controlla la rete e riprova.', ERR_GENERIC: 'Qualcosa non ha funzionato. Riprova tra poco.',
@@ -521,7 +555,13 @@ const STR = {
     ctaText: 'Add your availability in one minute, so others can find you and propose a session.',
     ctaButton: 'Add your availability →',
     updateText: 'Changed your schedule?', editData: 'Edit your details',
-    tabPeople: 'People', tabSessions: 'Sessions',
+    tabPeople: 'People', tabSessions: 'Sessions', tabFeedback: 'Post-session feedback',
+    fbIntro: 'A board for each finished session: how it went, what you noticed, what you take away. Only that session\'s participants can see it.',
+    fbNeedLogin: 'Sign in to see and write feedback on your sessions.', fbNone: 'Your finished sessions will appear here: after the first one you can leave feedback.',
+    fbNoComments: 'No comments yet: be the first.', fbPh: 'How did it go? What worked, what would you try differently…',
+    fbLoading: 'Loading feedback…', fbPost: 'Post', fbPosting: 'Posting…', fbDelete: 'Delete', fbDeleteAsk: 'Delete your comment?', fbPosted: 'Feedback posted.',
+    fbVisible: 'Visible to participants only.', fbWith: (n) => `with ${n}`,
+    ago: (m) => m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`,
     search: 'Search by name or city',
     fFormat: 'Format', fDay: 'Day', fTime: 'Time', filters: 'Filters', resetFilters: 'Clear filters',
     legendOn: 'Available', legendShared: 'Also free for you',
@@ -593,7 +633,7 @@ const STR = {
       ERR_PICK_TWO: 'Choose people from the list.', ERR_SELF: "You can't book a session with yourself.",
       ERR_THIRD: 'The third person must be someone else.',
       ERR_NOT_YOU: 'Your sign-in is missing or no longer valid: please sign in again.', ERR_PHOTO: 'The photo is not valid or is too large.',
-      ERR_NO_EMAIL: 'No email registered for this name.', ERR_EXPIRED: 'This session has already started: it can no longer be confirmed.', ERR_CANCELLED: 'This session was cancelled.', ERR_EMAIL: 'Check the email address.',
+      ERR_NO_EMAIL: 'No email registered for this name.', ERR_EMPTY: 'Write something before posting.', ERR_TOO_LONG: 'The comment is too long (1500 characters max).', ERR_NOT_YOURS: 'You can only delete your own comments.', ERR_EXPIRED: 'This session has already started: it can no longer be confirmed.', ERR_CANCELLED: 'This session was cancelled.', ERR_EMAIL: 'Check the email address.',
       ERR_SIGNIN: 'Google sign-in failed. Try again or get the link by email.',
       ERR_SETUP: 'Email sending is not active yet. Let the app organiser know and try again later.',
       ERR_NETWORK: 'Connection failed. Check your network and try again.', ERR_GENERIC: 'Something went wrong. Please try again shortly.',
@@ -1091,7 +1131,9 @@ function setSession(sess, greet) {
   state.session = sess; state.me = sess ? sess.name : '';
   try { sess ? localStorage.setItem('se-session', JSON.stringify(sess)) : localStorage.removeItem('se-session'); localStorage.removeItem('se-key'); } catch (e) {}
   state.tzSent = false;
-  if (!sess) { state.people.forEach(p => { delete p.freeUntil; }); state.online = []; }   // signed out: no more "free now" info
+  if (!sess) { state.people.forEach(p => { delete p.freeUntil; }); state.online = []; }
+  state.feedback = null;
+  if (!$('panel-feedback').hidden) loadFeedback(true);   // signed out: no more "free now" info
   render();
   if (sess) {
     if (greet) toast(T().welcome(first(sess.name)));
@@ -1137,6 +1179,7 @@ async function recognise() {
   if (!k) return;
   const stopReminders = params.get('reminders') === 'off';
   params.delete('me'); params.delete('reminders');
+  if (params.get('tab') === 'feedback') { params.delete('tab'); state.openFeedback = true; }
   const q = params.toString();
   try { history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash); } catch (e) {}
   try {
@@ -1144,15 +1187,73 @@ async function recognise() {
     if (!who) return;
     if ($('login-dlg').open) $('login-dlg').close();
     setSession({ name: who.name, key: who.key || k }, !stopReminders);
+    if (state.openFeedback) { state.openFeedback = false; selectTab('feedback'); }
     if (stopReminders) call('setDigest', who.key || k, false).then(() => toast(T().remindersOff)).catch(err => toast(errMsg(err)));
   } catch (e) { /* an invalid link simply leaves the app as it is */ }
 }
 function selectTab(tab) {
-  $('tab-people').setAttribute('aria-selected', String(tab === 'people'));
-  $('tab-sessions').setAttribute('aria-selected', String(tab === 'sessions'));
-  $('panel-people').hidden = tab !== 'people';
-  $('panel-sessions').hidden = tab !== 'sessions';
+  ['people', 'sessions', 'feedback'].forEach(x => {
+    $('tab-' + x).setAttribute('aria-selected', String(tab === x));
+    $('panel-' + x).hidden = tab !== x;
+  });
+  if (tab === 'feedback') loadFeedback();
 }
+
+/* ---------- Post-session feedback ---------- */
+state.feedback = null;
+async function loadFeedback(force) {
+  const box = $('feedback');
+  if (!myKey()) { box.innerHTML = `<div class="empty">${esc(T().fbNeedLogin)} <button class="btn btn-small" data-login="1">${esc(T().signIn)}</button></div>`; return; }
+  if (state.feedback && !force) renderFeedback();
+  else box.innerHTML = `<div class="loader-status" role="status"><span class="spinner" aria-hidden="true"></span><span>${esc(T().fbLoading)}</span></div>`;
+  try { state.feedback = (await call('getFeedback', myKey())).sessions; renderFeedback(); }
+  catch (err) { if (!state.feedback) box.innerHTML = `<div class="error">${esc(errMsg(err))}</div>`; }
+}
+function renderFeedback() {
+  const t = T(), box = $('feedback'), list = state.feedback || [];
+  const total = list.reduce((n, s) => n + s.comments.length, 0);
+  $('c-feedback').hidden = !total; $('c-feedback').textContent = total;
+  if (!list.length) { box.innerHTML = `<div class="empty">${esc(t.fbNone)}</div>`; return; }
+  const avatar = (name) => { const p = person(name);
+    return p && p.photo ? `<img class="avatar photo" src="${esc(p.photo)}" alt="">` : `<span class="avatar" style="background:${tone(name)}" aria-hidden="true">${esc(initials(name))}</span>`; };
+  const draft = {}; box.querySelectorAll('textarea[data-fb]').forEach(x => { draft[x.dataset.fb] = x.value; });   // keep what people are typing
+  box.innerHTML = list.map(s => {
+    const loc = localOf(s), title = fmtDate(loc.date);
+    const others = participants(s).filter(n => key(n) !== key(state.me)).map(first);
+    return `<article class="fb-session" id="fb-${esc(s.id)}">
+      <div class="fb-head"><h3>${esc(title.charAt(0).toUpperCase() + title.slice(1))} · ${esc(timeLabel(loc.time))}</h3>
+        <span class="meta">${esc(t.fbWith(joinNames(others)))} · ${esc(tv(s.format))}</span></div>
+      <div class="fb-list">${s.comments.length ? s.comments.map(c => `
+        <div class="fb-item ${c.mine ? 'mine' : ''}">${avatar(c.author)}
+          <div class="fb-bubble"><div class="fb-meta"><strong>${esc(first(c.author))}</strong><span>${esc(t.ago(Math.round((Date.now() - new Date(c.at)) / 60000)))}</span>
+            ${c.mine ? `<button type="button" class="fb-del" data-fb-del="${esc(c.id)}">${esc(t.fbDelete)}</button>` : ''}</div>
+            <p class="fb-text">${esc(c.text)}</p></div></div>`).join('') : `<p class="fb-empty">${esc(t.fbNoComments)}</p>`}</div>
+      ${s.canWrite ? `<form class="fb-form" data-fb-form="${esc(s.id)}">
+        <textarea data-fb="${esc(s.id)}" maxlength="1500" placeholder="${esc(t.fbPh)}" aria-label="${esc(t.fbPh)}">${esc(draft[s.id] || '')}</textarea>
+        <div class="row"><p class="hint">${esc(t.fbVisible)}</p><button type="submit" class="btn btn-small">${esc(t.fbPost)}</button></div>
+      </form>` : ''}
+    </article>`;
+  }).join('');
+}
+document.addEventListener('submit', async (e) => {
+  const form = e.target.closest('[data-fb-form]');
+  if (!form) return;
+  e.preventDefault();
+  const ta = form.querySelector('textarea'), text = ta.value.trim();
+  if (!text) return ta.focus();
+  const done = busy(form.querySelector('button[type=submit]'), T().fbPosting);
+  try {
+    state.feedback = (await call('addFeedback', myKey(), form.dataset.fbForm, text, state.lang)).sessions;
+    ta.value = ''; done(); renderFeedback(); toast(T().fbPosted);
+  } catch (err) { done(); toast(errMsg(err)); }
+});
+document.addEventListener('click', async (e) => {
+  const del = e.target.closest('[data-fb-del]');
+  if (!del || !confirm(T().fbDeleteAsk)) return;
+  del.disabled = true;
+  try { state.feedback = (await call('deleteFeedback', myKey(), del.dataset.fbDel)).sessions; renderFeedback(); }
+  catch (err) { del.disabled = false; toast(errMsg(err)); }
+});
 
 $('q').oninput = (e) => { state.q = e.target.value; updateFilterUI(); renderPeople(); };
 $('f-toggle').onclick = () => setFiltersOpen($('filters').hidden);
@@ -1166,6 +1267,7 @@ $('f-reset').onclick = () => {
 })();
 $('tab-people').onclick = () => selectTab('people');
 $('tab-sessions').onclick = () => selectTab('sessions');
+$('tab-feedback').onclick = () => selectTab('feedback');
 document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => setLang(b.dataset.lang));
 
 /* ---------- Free right now ---------- */
@@ -1475,6 +1577,14 @@ function demo(fn, ...args) {
   const db = demo.db;
   const actor = (k) => { const p = db.people.find(x => x.key === k); if (!p) throw new Error('ERR_NOT_YOU'); return p.name; };
   if (fn === 'leave') return { ok: true };
+  if (fn === 'getFeedback' || fn === 'addFeedback' || fn === 'deleteFeedback') {
+    if (!demo.fb) demo.fb = [{ id: 'past1', by: 'Anna Rossi', with: 'Luca Bianchi', third: '', date: '2026-10-28', time: '19:00', format: 'Online', canWrite: true,
+      comments: [{ id: 'c1', author: 'Anna Rossi', at: new Date(Date.now() - 3 * 3600e3).toISOString(), mine: false,
+                   text: 'Grazie Luca! Mi è stato molto utile lavorare sull\'orientamento all\'inizio.\nLa prossima volta vorrei provare a fare io l\'osservatrice.' }] }];
+    if (fn === 'addFeedback') demo.fb.find(s => s.id === args[1]).comments.push({ id: String(Date.now()), author: actor(args[0]), at: new Date().toISOString(), mine: true, text: args[2] });
+    if (fn === 'deleteFeedback') demo.fb.forEach(s => { s.comments = s.comments.filter(c => c.id !== args[1]); });
+    return { sessions: JSON.parse(JSON.stringify(demo.fb)) };
+  }
   if (fn === 'getNow') return { online: args[0] ? ['Anna Rossi', 'Luca Bianchi'] : [], now: args[0] ? Object.fromEntries(db.people.filter(p => p.freeUntil).map(p => [p.name, p.freeUntil])) : {} };
   if (fn === 'getData' && !args[0]) { const c = JSON.parse(JSON.stringify(db)); c.people.forEach(p => delete p.freeUntil); return c; }
   if (fn === 'getData') return { ...JSON.parse(JSON.stringify(db)), online: ['Anna Rossi', 'Luca Bianchi'] };

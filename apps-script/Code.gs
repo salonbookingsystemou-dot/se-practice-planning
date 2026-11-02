@@ -13,6 +13,9 @@ const CONFIG = {
   PHOTOS_SHEET: 'Photos',     // photos uploaded from the app (small JPEGs, one row per person)
   NOW_SHEET: 'Now',           // "free right now" switches: one row per person with the time it ends
   ZONES_SHEET: 'Zones',       // per person: time zone, dashboard language, reminders on/off
+  FEEDBACK_SHEET: 'Feedback',  // post-session comments: one row per comment
+  FEEDBACK_DAYS: 90,          // sessions shown on the feedback board (days back)
+  FEEDBACK_PUBLIC: false,     // false = only the session's participants see and write its board
   MAIL_LOG_SHEET: 'Mail log', // one row per email: when, type, to, subject, result
   TIMEZONE: 'Europe/Rome',
   MIN_GAP_MINUTES: 90,        // a person can't have two sessions closer than this
@@ -38,7 +41,8 @@ const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time',
 
 const API = { getData: getData, createBooking: createBooking, confirmBooking: confirmBooking, cancelBooking: cancelBooking,
               whoAmI: whoAmI, signIn: signIn, requestLink: requestLink, uploadPhoto: uploadPhoto, getNow: getNow, setFreeNow: setFreeNow,
-              setTimeZone: setTimeZone, setLanguage: setLanguage, leave: leave, setDigest: setDigest, status: status };
+              setTimeZone: setTimeZone, setLanguage: setLanguage, leave: leave, setDigest: setDigest, status: status,
+              getFeedback: getFeedback, addFeedback: addFeedback, deleteFeedback: deleteFeedback };
 
 /* Health check without personal data: is the scheduler alive, are Gmail/Calendar usable, what happened to recent sessions */
 function status() {
@@ -639,6 +643,120 @@ function withBooking_(id, change, lang, k) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ---------- Post-session feedback board ----------
+   For each confirmed session that has ended: a thread of comments. By default only its participants can see and write. */
+
+function pastSessions_() {
+  const t = Date.now(), from = t - CONFIG.FEEDBACK_DAYS * 86400000;
+  const out = [];
+  bookingsSheet_().getDataRange().getValues().slice(1).forEach(function (r) {
+    if (String(r[8]) !== 'confirmed') return;
+    const b = { id: String(r[0]), by: String(r[2]), with: String(r[3]), third: String(r[9] || ''), date: asDate_(r[4]), time: asTime_(r[5]),
+                format: String(r[6]) };
+    const st = startOf_(b);
+    if (!st || st.getTime() + CONFIG.SESSION_MINUTES * 60000 > t || st.getTime() < from) return;
+    out.push(b);
+  });
+  return out.sort(function (a, b) { return (b.date + b.time).localeCompare(a.date + a.time); });   // newest first
+}
+
+function feedbackSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CONFIG.FEEDBACK_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.FEEDBACK_SHEET);
+    sheet.getRange(1, 1, 1, 5).setValues([['ID', 'Session', 'Author', 'When', 'Text']]).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function canSee_(b, name) {
+  return CONFIG.FEEDBACK_PUBLIC || participants_(b).some(function (n) { return key_(n) === key_(name); });
+}
+
+function getFeedback(k) {
+  const me = actor_(k);
+  const sessions = pastSessions_().filter(function (b) { return canSee_(b, me.name); });
+  const ids = {};
+  sessions.forEach(function (b) { ids[b.id] = true; b.comments = []; });
+  const byId = {};
+  sessions.forEach(function (b) { byId[b.id] = b; });
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.FEEDBACK_SHEET);
+  if (sheet) {
+    sheet.getDataRange().getValues().slice(1).forEach(function (r) {
+      const sid = String(r[1]);
+      if (!ids[sid]) return;
+      byId[sid].comments.push({ id: String(r[0]), author: String(r[2]), at: r[3] instanceof Date ? r[3].toISOString() : String(r[3]),
+                                text: String(r[4]), mine: key_(r[2]) === key_(me.name) });
+    });
+  }
+  sessions.forEach(function (b) {
+    b.canWrite = participants_(b).some(function (n) { return key_(n) === key_(me.name); });
+    b.comments.sort(function (a, c) { return a.at.localeCompare(c.at); });
+  });
+  return { sessions: sessions };
+}
+
+function addFeedback(k, sessionId, text, lang) {
+  const me = actor_(k);
+  const body = String(text || '').trim();
+  if (!body) throw new Error('ERR_EMPTY');
+  if (body.length > 1500) throw new Error('ERR_TOO_LONG');
+  const b = pastSessions_().find(function (x) { return x.id === String(sessionId); });
+  if (!b) throw new Error('ERR_NOT_FOUND');
+  if (!participants_(b).some(function (n) { return key_(n) === key_(me.name); })) throw new Error('ERR_ONLY_PAIR');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    feedbackSheet_().appendRow([Utilities.getUuid().slice(0, 8), b.id, me.name, new Date(), body]);
+  } finally { lock.releaseLock(); }
+  notifyFeedback_(b, me, body, lang);
+  return getFeedback(k);
+}
+
+function deleteFeedback(k, commentId) {
+  const me = actor_(k);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = feedbackSheet_();
+    const values = sheet.getDataRange().getValues();
+    for (var i = 1; i < values.length; i++) {
+      if (String(values[i][0]) !== String(commentId)) continue;
+      if (key_(values[i][2]) !== key_(me.name)) throw new Error('ERR_NOT_YOURS');
+      sheet.deleteRow(i + 1);
+      break;
+    }
+  } finally { lock.releaseLock(); }
+  return getFeedback(k);
+}
+
+const FEEDBACK_MAIL = {
+  it: { subject: function (v) { return v.author + ' ha lasciato un feedback sulla sessione del ' + v.when; },
+        lead: function (v) { return v.author + ' ha scritto sulla bacheca della vostra sessione di pratica del ' + v.when + ':'; },
+        button: 'Leggi e rispondi' },
+  en: { subject: function (v) { return v.author + ' left feedback on the session of ' + v.when; },
+        lead: function (v) { return v.author + ' wrote on the board of your practice session of ' + v.when + ':'; },
+        button: 'Read and reply' },
+};
+
+function notifyFeedback_(b, me, body, lang) {
+  if (!CONFIG.SEND_EMAILS) return;
+  const people = readPeople_(), langs = readLangs_();
+  const first = function (n) { return String(n).split(/\s+/)[0]; };
+  participants_(b).filter(function (n) { return key_(n) !== key_(me.name); }).forEach(function (name) {
+    const p = people.find(function (x) { return key_(x.name) === key_(name); }) || { name: name };
+    const l = MAIL[langs[name]] ? langs[name] : (MAIL[lang] ? lang : 'it');
+    const t1 = MAIL[l], m = FEEDBACK_MAIL[l];
+    const v = { author: first(me.name), when: dateLabel_(b.date, t1.locale).long };
+    const quote = '<blockquote style="margin:0 0 20px;padding:12px 16px;border-left:3px solid #D86018;background:#F7F3F5;border-radius:8px;font-size:15px;white-space:pre-wrap">' + esc_(body) + '</blockquote>';
+    const url = personalUrl_(name) + '&tab=feedback';
+    const html = mailFrame_(m.lead(v), quote, url, m.button, t1.footer);
+    try { sendLogged_('feedback', p.name, p.email, m.subject(v), m.lead(v) + '\n\n' + body + '\n\n' + url, replyOpts_(html, me.email), b.id); } catch (e) { /* logged */ }
+  });
 }
 
 /* ---------- Email log ---------- */
