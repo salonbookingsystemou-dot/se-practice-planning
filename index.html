@@ -426,7 +426,8 @@ const STR = {
     available: 'disponibile',
     noSessions: 'Nessuna sessione in programma. Scegli qualcuno in Persone e proponine una.',
     withWord: 'con', confirmed: 'Confermata', proposed: 'Proposta',
-    confirm: 'Conferma', remindWa: 'Ricorda su WhatsApp', cancelSession: 'Annulla',
+    confirm: 'Conferma', decline: 'Rifiuta', declineAsk: 'Rifiutare l\'invito? La sessione verrà annullata per tutti.', declinedToast: 'Invito rifiutato.',
+    emailedDecline: (n) => `Invito rifiutato. Abbiamo avvisato ${n} via email.`, remindWa: 'Ricorda su WhatsApp', cancelSession: 'Annulla',
     dlgTitle: 'Proponi una sessione', yourName: 'Il tuo nome', with: 'Con', date: 'Data', time: 'Ora',
     third: 'Terzo partecipante (facoltativo, per una triade)', nobody: 'Nessuno · sessione a due',
     format: 'Formato', note: 'Nota (facoltativa)', notePh: 'es. link della videochiamata, chi fa il praticante…',
@@ -524,7 +525,8 @@ const STR = {
     available: 'available',
     noSessions: 'No sessions planned yet. Pick someone in People and propose one.',
     withWord: 'with', confirmed: 'Confirmed', proposed: 'Proposed',
-    confirm: 'Confirm', remindWa: 'Remind on WhatsApp', cancelSession: 'Cancel',
+    confirm: 'Confirm', decline: 'Decline', declineAsk: 'Decline the invitation? The session will be cancelled for everyone.', declinedToast: 'Invitation declined.',
+    emailedDecline: (n) => `Invitation declined. We emailed ${n}.`, remindWa: 'Remind on WhatsApp', cancelSession: 'Cancel',
     dlgTitle: 'Propose a session', yourName: 'Your name', with: 'With', date: 'Date', time: 'Time',
     third: 'Third person (optional, for a triad)', nobody: 'Nobody · session for two',
     format: 'Format', note: 'Note (optional)', notePh: 'e.g. video call link, who is the practitioner…',
@@ -947,7 +949,7 @@ function renderSessions() {
         ${mine ? `<div class="actions">
           ${canConfirm ? `<button class="btn btn-small" data-confirm="${esc(b.id)}">${esc(t.confirm)}</button>` : ''}
           ${reminders.map(([n, wa]) => `<a class="btn btn-ghost btn-small btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${esc(inv.length > 1 ? t.waTo(first(n)) : t.remindWa)}</a>`).join('')}
-          <button class="btn btn-ghost btn-small btn-danger" data-cancel="${esc(b.id)}">${esc(t.cancelSession)}</button></div>` : ''}
+          <button class="btn btn-ghost btn-small btn-danger" data-cancel="${esc(b.id)}" ${canConfirm ? 'data-decline="1"' : ''}>${esc(canConfirm ? t.decline : t.cancelSession)}</button></div>` : ''}
       </div>`;
     }).join('') + '</div>';
   }).join('');
@@ -1357,7 +1359,8 @@ document.addEventListener('click', async (e) => {
   if (el.dataset.book) return openBooking(el.dataset.book, !!el.dataset.now);
   const t = T();
   if (!myKey()) return openLogin(t.needLogin);
-  if (el.dataset.cancel && !confirm(t.cancelAsk)) return;
+  const declining = !!el.dataset.decline;
+  if (el.dataset.cancel && !confirm(declining ? t.declineAsk : t.cancelAsk)) return;
   const row = el.closest('.session');
   if (row) row.querySelectorAll('.actions .btn').forEach(b => { if (b !== el) b.disabled = true; });
   const done = busy(el, el.dataset.confirm ? t.busyConfirming : t.busyCancelling);
@@ -1371,7 +1374,8 @@ document.addEventListener('click', async (e) => {
     }
     if (el.dataset.cancel) {
       const d = await call('cancelBooking', el.dataset.cancel, myKey(), state.lang); apply(d);
-      toast(asList(d.emailed).length ? t.emailedCancel(joinNames(asList(d.emailed).map(first))) : t.cancelledToast);
+      const names = joinNames(asList(d.emailed).map(first));
+      toast(declining ? (names ? t.emailedDecline(names) : t.declinedToast) : (names ? t.emailedCancel(names) : t.cancelledToast));
     }
   } catch (err) { toast(errMsg(err)); }
   finally {

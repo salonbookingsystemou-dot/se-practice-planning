@@ -561,7 +561,8 @@ function cancelBooking(id, k, lang) {
     if (b.status === 'cancelled' || b.status === 'expired') return { unchanged: true };
     sheet.getRange(row, 9).setValue('cancelled');
     if (b.eventId) removeEvent_(b.eventId);
-    return { event: 'cancelled', actor: who };
+    const declined = key_(who) !== key_(b.by) && b.confirmedBy.indexOf(who) === -1;   // invited and never accepted
+    return { event: declined ? 'declined' : 'cancelled', actor: who };
   }, lang, k);
 }
 
@@ -675,13 +676,16 @@ const MAIL = {
   it: {
     proposed: { subject: function (v) { return v.actorFirst + ' ti propone una sessione di pratica SE'; },
       lead: function (v) { return v.actor + ' ti ha proposto una sessione di pratica' + (v.others ? ' insieme a ' + v.others : '') + ':'; },
-      action: 'Apri l\'app per confermarla o annullarla.', button: 'Conferma la sessione' },
+      action: 'Dall\'app puoi confermarla o rifiutarla con un clic.', button: 'Conferma o rifiuta' },
     confirmed: { subject: function (v) { return v.actorFirst + ' ha confermato la sessione di pratica'; },
       lead: function (v) { return v.actor + ' ha confermato la sessione di pratica' + (v.allConfirmed ? ': ora è confermata da tutti.' : '. Si attende ancora la conferma di ' + v.pending + '.'); },
       action: 'Buona pratica!', button: 'Apri l\'app' },
     scheduled: { subject: function (v) { return 'Sessione confermata · ' + v.whenShort + (v.meet ? ' · link Meet' : ''); },
       lead: function (v) { return 'La sessione di pratica è confermata da tutti.' + (v.meet ? ' Ecco il link per collegarvi.' : ''); },
       action: 'Buona pratica!', button: 'Entra su Google Meet', buttonNoMeet: 'Apri l\'app' },
+    declined: { subject: function (v) { return v.actorFirst + ' ha rifiutato l\'invito · ' + v.whenShort; },
+      lead: function (v) { return v.actor + ' ha rifiutato l\'invito a questa sessione di pratica, che quindi è annullata:'; },
+      action: 'Se volete, potete proporne un\'altra in un altro orario dall\'app.', button: 'Apri l\'app' },
     cancelled: { subject: function (v) { return 'Sessione di pratica annullata · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' ha annullato questa sessione di pratica:'; },
       action: 'Se volete, potete proporne un\'altra dall\'app.', button: 'Apri l\'app' },
@@ -694,13 +698,16 @@ const MAIL = {
   en: {
     proposed: { subject: function (v) { return v.actorFirst + ' proposed an SE practice session'; },
       lead: function (v) { return v.actor + ' proposed a practice session with you' + (v.others ? ' and ' + v.others : '') + ':'; },
-      action: 'Open the app to confirm or cancel it.', button: 'Confirm the session' },
+      action: 'In the app you can confirm or decline it with one click.', button: 'Confirm or decline' },
     confirmed: { subject: function (v) { return v.actorFirst + ' confirmed the practice session'; },
       lead: function (v) { return v.actor + ' confirmed the practice session' + (v.allConfirmed ? ': everyone has now confirmed.' : '. Still waiting for ' + v.pending + '.'); },
       action: 'Enjoy the practice!', button: 'Open the app' },
     scheduled: { subject: function (v) { return 'Session confirmed · ' + v.whenShort + (v.meet ? ' · Meet link' : ''); },
       lead: function (v) { return 'The practice session is confirmed by everyone.' + (v.meet ? ' Here is the link to join.' : ''); },
       action: 'Enjoy the practice!', button: 'Join on Google Meet', buttonNoMeet: 'Open the app' },
+    declined: { subject: function (v) { return v.actorFirst + ' declined the invitation · ' + v.whenShort; },
+      lead: function (v) { return v.actor + ' declined the invitation to this practice session, so it is cancelled:'; },
+      action: 'You can propose another time from the app.', button: 'Open the app' },
     cancelled: { subject: function (v) { return 'Practice session cancelled · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' cancelled this practice session:'; },
       action: 'You can propose another one from the app.', button: 'Open the app' },
@@ -920,8 +927,8 @@ const REMIND_MAIL = {
   it: {
     invSubject: function (v) { return 'Conferma la sessione di ' + v.whenShort + ' con ' + v.byFirst; },
     invLead: function (v) { return 'La sessione di pratica proposta da ' + v.by + ' non è ancora confermata.'; },
-    invAction: 'Se non la confermi entro l\'orario d\'inizio, verrà annullata automaticamente.',
-    invButton: 'Conferma la sessione',
+    invAction: 'Dall\'app puoi confermarla o rifiutarla con un clic. Se non rispondi entro l\'orario d\'inizio, verrà annullata automaticamente.',
+    invButton: 'Conferma o rifiuta',
     bySubject: function (v) { return 'Sessione di ' + v.whenShort + ': manca la conferma di ' + v.pending; },
     byLead: function (v) { return v.pending + (v.many ? ' non hanno' : ' non ha') + ' ancora confermato la sessione che hai proposto.'; },
     byAction: 'Se la conferma non arriva entro l\'orario d\'inizio, la sessione verrà annullata. Puoi ricordarlo anche su WhatsApp.',
@@ -930,8 +937,8 @@ const REMIND_MAIL = {
   en: {
     invSubject: function (v) { return 'Confirm the session ' + v.whenShort + ' with ' + v.byFirst; },
     invLead: function (v) { return 'The practice session proposed by ' + v.by + ' is not confirmed yet.'; },
-    invAction: 'If you don\'t confirm it before it starts, it will be cancelled automatically.',
-    invButton: 'Confirm the session',
+    invAction: 'In the app you can confirm or decline it with one click. If you don\'t answer before it starts, it will be cancelled automatically.',
+    invButton: 'Confirm or decline',
     bySubject: function (v) { return 'Session ' + v.whenShort + ': waiting for ' + v.pending; },
     byLead: function (v) { return v.pending + (v.many ? ' have' : ' has') + ' not confirmed the session you proposed yet.'; },
     byAction: 'If the confirmation doesn\'t arrive before it starts, the session will be cancelled. You can also remind them on WhatsApp.',

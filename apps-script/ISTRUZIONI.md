@@ -44,6 +44,7 @@ vanno comunque confermate una volta nell'editor eseguendo `testEmail`.
 
 ## Notifiche email
 - proposta → all'invitato · conferma → a chi ha proposto · annullamento → all'altra persona.
+- L'invitato può **confermare o rifiutare** (pulsante «Conferma o rifiuta» nelle email, «Rifiuta» nell'app): se rifiuta, la sessione è annullata e gli altri ricevono «… ha rifiutato l'invito».
 - Partono dal tuo account come «SE Practice Partners»; rispondendo si scrive all'altro studente.
 - **Lingua:** ognuno riceve le email nella lingua che usa sulla dashboard (IT/EN, salvata nel foglio «Zones»);
   chi non l'ha mai aperta le riceve nella lingua della pagina di chi propone. Anche l'evento in calendario segue la lingua.
