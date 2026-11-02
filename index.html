@@ -151,6 +151,8 @@
   .session .actions { display: flex; gap: 6px; }
 
   /* Loader: a status line plus placeholder cards with a soft shimmer */
+  .refreshing { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin: -8px 0 12px; }
+  .refreshing .spinner { width: 14px; height: 14px; border-width: 2px; }
   .loader-status { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; padding: 4px 2px; }
   .spinner { width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid var(--accent-soft); border-top-color: var(--accent);
              animation: spin .8s linear infinite; flex-shrink: 0; }
@@ -287,6 +289,7 @@
   <p class="update" id="update" hidden><span data-i18n="updateText"></span>
     <a class="btn btn-ghost btn-small btn-edit" id="update-link" href="#" target="_blank" rel="noopener"><span aria-hidden="true">✎</span> <span data-i18n="editData"></span></a></p>
 
+  <p class="refreshing" id="refreshing" role="status" hidden><span class="spinner" aria-hidden="true"></span><span data-i18n="refreshing"></span></p>
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" id="tab-people" aria-selected="true" aria-controls="panel-people"><span data-i18n="tabPeople"></span><span class="count" id="c-people">0</span></button>
     <button class="tab" role="tab" id="tab-sessions" aria-selected="false" aria-controls="panel-sessions"><span data-i18n="tabSessions"></span><span class="count" id="c-sessions">0</span></button>
@@ -473,6 +476,7 @@ const STR = {
     phNoEmail: 'Non troviamo un indirizzo email per te: aggiungilo con «Modifica i tuoi dati», poi torna qui.',
     phLinkSent: 'Fatto: controlla la tua email e apri il link. L\'app ti riconoscerà e potrai caricare la foto.',
     phBadFile: 'Non riesco a leggere questa immagine. Prova con un\'altra foto.',
+    refreshing: 'Aggiorno i dati…', offlineCopy: 'Connessione non riuscita: stai vedendo i dati dell\'ultima visita.',
     loading: 'Carico le disponibilità…', loadingSlow: 'Ancora qualche secondo: sto leggendo il foglio delle risposte…',
     loadError: 'Non è stato possibile caricare i dati:', pickName: 'Scegli il tuo nome.',
     invite: (v) => `Ciao${v.to ? ' ' + v.to : ''}! ${v.plural ? 'Vi' : 'Ti'} ho proposto una sessione di pratica SE${v.others ? ' insieme a ' + v.others : ''} ${v.when} alle ${v.time} (${v.fmt}).` +
@@ -570,6 +574,7 @@ const STR = {
     phNoEmail: 'We can\'t find an email address for you: add it with «Edit your details», then come back.',
     phLinkSent: 'Done: check your email and open the link. The app will recognise you and you can upload your photo.',
     phBadFile: 'I can\'t read this image. Try another photo.',
+    refreshing: 'Updating…', offlineCopy: 'Could not connect: you are seeing the data from your last visit.',
     loading: 'Loading availability…', loadingSlow: 'A few more seconds: reading the responses sheet…',
     loadError: "Couldn't load the data:", pickName: 'Choose your name.',
     invite: (v) => `Hi${v.to ? ' ' + v.to : ''}! I've proposed an SE practice session with ${v.plural ? 'you both' : 'you'}${v.others ? ' and ' + v.others : ''} ${v.when} at ${v.time} (${v.fmt}).` +
@@ -1066,10 +1071,11 @@ function setSession(sess, greet) {
   render();
   if (sess) {
     if (greet) toast(T().welcome(first(sess.name)));
-    call('getData', sess.key).then(d => { apply(d); maybeAskPhoto(); }).catch(() => maybeAskPhoto());
+    call('getData', sess.key).then(d => { apply(d); saveCache(d); maybeAskPhoto(); }).catch(() => maybeAskPhoto());
   }
 }
 function signOut() {
+  try { localStorage.removeItem(CACHE_KEY); } catch (e) {}
   setSession(null);
   try { google.accounts.id.disableAutoSelect(); } catch (e) {}
 }
@@ -1340,7 +1346,7 @@ $('ph-save').onclick = async () => {
   if (!photo.data) return;
   $('ph-error').textContent = '';
   const done = busy($('ph-save'), T().busySaving);
-  try { apply(await call('uploadPhoto', myKey(), photo.data)); done(); $('photo-dlg').close(); toast(T().phSaved); }
+  try { const d = await call('uploadPhoto', myKey(), photo.data); apply(d); saveCache(d); done(); $('photo-dlg').close(); toast(T().phSaved); }
   catch (err) { done(); $('ph-error').textContent = errMsg(err); }
 };
 
@@ -1388,14 +1394,43 @@ function renderLoading() {
   $('sessions').innerHTML = `<div class="loader-status" role="status"><span class="spinner" aria-hidden="true"></span><span>${esc(T().loading)}</span></div>`;
 }
 
+/* ---------- Instant start: show the last data seen on this device, then refresh it ----------
+   The copy lives only in this browser. "Free now" and presence are kept only for the person signed in when it was saved. */
+const CACHE_KEY = 'se-cache-v1';
+const CACHE_MAX_AGE = 7 * 864e5;
+function saveCache(data) {
+  if (USE_SAMPLE || !data || !data.people) return;
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), who: myKey(), data })); } catch (e) { /* storage full or blocked */ }
+}
+function loadCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+    if (!c || !c.data || Date.now() - c.at > CACHE_MAX_AGE) return null;
+    const data = c.data;
+    if (c.who !== myKey()) {   // saved for someone else, or before signing out: drop the members-only parts
+      data.people.forEach(p => { delete p.freeUntil; });
+      data.online = [];
+    }
+    return data;
+  } catch (e) { return null; }
+}
+function setRefreshing(on) {
+  $('refreshing').hidden = !on;
+}
+
 applyTexts();
-renderLoading();
-const slowTimer = setTimeout(() => { const el = $('loading-text'); if (el) el.textContent = T().loadingSlow; }, 4000);
+const cached = USE_SAMPLE ? null : loadCache();
+if (cached) { apply(cached); setRefreshing(true); } else renderLoading();
+const slowTimer = cached ? 0 : setTimeout(() => { const el = $('loading-text'); if (el) el.textContent = T().loadingSlow; }, 4000);
 recognise();
-call('getData', myKey()).then(data => { apply(data); state.me ? maybeAskPhoto() : maybeAskLogin(); }).catch(err => {
+call('getData', myKey()).then(data => {
+  apply(data); saveCache(data);
+  state.me ? maybeAskPhoto() : maybeAskLogin();
+}).catch(err => {
+  if (cached) { toast(T().offlineCopy); return; }   // keep showing the saved copy
   $('people').innerHTML = `<div class="error">${esc(T().loadError)} ${esc(errMsg(err))}</div>`;
   $('sessions').innerHTML = '';
-}).finally(() => { clearTimeout(slowTimer); $('people').removeAttribute('aria-busy'); });
+}).finally(() => { clearTimeout(slowTimer); setRefreshing(false); $('people').removeAttribute('aria-busy'); });
 
 /* ---------- Sample data, used only when the page is opened outside Apps Script ---------- */
 function demo(fn, ...args) {

@@ -91,7 +91,7 @@ Non c'è più il menu «Io sono»: chi non ha fatto l'accesso può solo guardare
   il nome lo ricava il motore, quindi nessuno può agire a nome di altri. «Esci» in alto toglie l'accesso dal dispositivo.
 - Chi non ha fatto l'accesso vede persone e disponibilità abituali, ma **non** chi è libero adesso e non può proporre:
   il motore non invia proprio quell'informazione senza un codice personale valido.
-- Le foto caricate dall'app (320 px) stanno nel foglio «Photos» e hanno la precedenza su quelle del modulo.
+- Le foto caricate dall'app (200 px) stanno nel foglio «Photos» e hanno la precedenza su quelle del modulo.
 
 ## «Ora sono libero»
 Nella propria card c'è uno switch con una durata (30 min, 1, 2 o 3 ore): finché è attivo la card è evidenziata in arancio,
@@ -127,6 +127,11 @@ Per spegnere: `CREATE_MEET: false`.
 - **Backup automatico:** in Apps Script esegui una volta `installTriggers` (attiva anche il promemoria qui sotto). Ogni notte verso le 3 salva una copia `.xlsx`
   nella cartella Drive «SE Practice · backup» e tiene le ultime 30 (`BACKUP_KEEP`). Backup al volo: esegui `backupNow`.
 - Per tornare indietro di poche ore c'è anche **File → Cronologia versioni** del foglio.
+
+## Avvio rapido
+La pagina salva nel browser una copia dei dati dell'ultima visita (massimo 7 giorni) e la mostra subito, con
+«Aggiorno i dati…» mentre arrivano quelli nuovi. Se il motore non risponde, resta visibile la copia.
+«Liberi ora» e «connessi» della copia valgono solo per la stessa persona; «Esci» cancella la copia.
 
 ## Prova senza dati veri
 Apri `index.html` dal computer, oppure `se-practice.mnesti.it/?demo`: usa dati di esempio e non scrive nulla.
