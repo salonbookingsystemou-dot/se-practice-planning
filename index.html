@@ -481,11 +481,11 @@ const STR = {
       ERR_PICK_TWO: 'Scegli le persone dalla lista.', ERR_SELF: 'Non puoi prenotare una sessione con te stesso.',
       ERR_THIRD: 'Il terzo partecipante deve essere una persona diversa.',
       ERR_NOT_YOU: 'Accesso scaduto o non valido: accedi di nuovo.', ERR_PHOTO: 'La foto non è valida o è troppo grande.',
-      ERR_NO_EMAIL: 'Nessuna email registrata per questo nome.', ERR_EMAIL: 'Controlla l\'indirizzo email.',
+      ERR_NO_EMAIL: 'Nessuna email registrata per questo nome.', ERR_EXPIRED: 'L\'orario di questa sessione è già passato: non si può più confermare.', ERR_EMAIL: 'Controlla l\'indirizzo email.',
       ERR_SIGNIN: 'Accesso con Google non riuscito. Riprova o ricevi il link via email.',
       ERR_SETUP: 'L\'invio delle email non è ancora attivo. Avvisa chi gestisce l\'app e riprova più tardi.',
       ERR_NETWORK: 'Connessione non riuscita. Controlla la rete e riprova.', ERR_GENERIC: 'Qualcosa non ha funzionato. Riprova tra poco.',
-      ERR_DATE: 'Scegli una data.', ERR_TIME: 'Scegli un orario.', ERR_PAST: 'La data è già passata.',
+      ERR_DATE: 'Scegli una data.', ERR_TIME: 'Scegli un orario.', ERR_PAST: 'Data e ora sono già passate.',
       ERR_CLASH: (a, b, t) => `${a} e ${b} hanno già una sessione alle ${t} quel giorno.`,
       ERR_ONLY_INVITED: 'Solo la persona invitata può confermare.',
       ERR_ONLY_PAIR: 'Solo le due persone della sessione possono annullarla.', ERR_NOT_FOUND: 'Sessione non trovata.',
@@ -576,11 +576,11 @@ const STR = {
       ERR_PICK_TWO: 'Choose people from the list.', ERR_SELF: "You can't book a session with yourself.",
       ERR_THIRD: 'The third person must be someone else.',
       ERR_NOT_YOU: 'Your sign-in is missing or no longer valid: please sign in again.', ERR_PHOTO: 'The photo is not valid or is too large.',
-      ERR_NO_EMAIL: 'No email registered for this name.', ERR_EMAIL: 'Check the email address.',
+      ERR_NO_EMAIL: 'No email registered for this name.', ERR_EXPIRED: 'This session has already started: it can no longer be confirmed.', ERR_EMAIL: 'Check the email address.',
       ERR_SIGNIN: 'Google sign-in failed. Try again or get the link by email.',
       ERR_SETUP: 'Email sending is not active yet. Let the app organiser know and try again later.',
       ERR_NETWORK: 'Connection failed. Check your network and try again.', ERR_GENERIC: 'Something went wrong. Please try again shortly.',
-      ERR_DATE: 'Choose a date.', ERR_TIME: 'Choose a time.', ERR_PAST: 'The date is in the past.',
+      ERR_DATE: 'Choose a date.', ERR_TIME: 'Choose a time.', ERR_PAST: 'That date and time have already passed.',
       ERR_CLASH: (a, b, t) => `${a} and ${b} already have a session at ${t} that day.`,
       ERR_ONLY_INVITED: 'Only the invited person can confirm.',
       ERR_ONLY_PAIR: 'Only the two people in the session can cancel it.', ERR_NOT_FOUND: 'Session not found.',
@@ -910,6 +910,10 @@ function renderPeople() {
 
 function renderSessions() {
   const t = T();
+  // drop unconfirmed sessions whose start time passed while the page was open
+  state.bookings = state.bookings.filter(b => b.status === 'confirmed'
+    ? romeInstant(b.date, b.time).getTime() + 90 * 60000 > Date.now()
+    : romeInstant(b.date, b.time).getTime() > Date.now());
   $('c-sessions').textContent = state.bookings.length;
   const box = $('sessions');
   if (!state.bookings.length) { box.innerHTML = `<div class="empty">${esc(t.noSessions)}</div>`; return; }
@@ -1177,6 +1181,7 @@ setInterval(async () => {
   if (document.visibilityState !== 'visible' || !state.people.length) return;
   try { { const r = await call('getNow', myKey()); applyNow(r.now); applyOnline(r.online); }; } catch (e) { /* keep what we have */ }
   if (!document.activeElement || !document.activeElement.matches('[data-free-mins]')) renderPeople();
+  renderSessions();
 }, 60000);
 /* Closing the page: tell the engine right away instead of waiting for the 2.5-minute timeout */
 window.addEventListener('pagehide', () => {

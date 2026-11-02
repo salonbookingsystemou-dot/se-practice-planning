@@ -56,6 +56,12 @@ Nel modulo di proposta si può scegliere un **terzo partecipante** (facoltativo)
 ognuno conferma per sé e la sessione diventa «Confermata» quando hanno confermato tutti e due.
 Nel foglio «Bookings» le colonne *Third* e *Confirmed by* si aggiungono da sole.
 
+## Sessioni scadute
+- Una sessione **non confermata** da tutti, passato l'orario d'inizio, esce dall'app e nel foglio «Bookings» diventa `expired`
+  (resta come storico, non si cancella). Dopo l'inizio non si può più confermare.
+- Una sessione **confermata** resta visibile fino alla fine dell'incontro (inizio + `SESSION_MINUTES`), poi esce dall'app.
+- Non si possono proporre sessioni con data e ora già passate.
+
 ## Accesso: Google o link personale
 Non c'è più il menu «Io sono»: chi non ha fatto l'accesso può solo guardare.
 - **Accedi con Google**: un clic con l'account usato nel modulo. Il motore verifica con Google la firma dell'accesso

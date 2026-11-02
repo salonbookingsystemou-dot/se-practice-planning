@@ -131,28 +131,46 @@ function photo_(link) {
   return uri;
 }
 
+/* Upcoming sessions for the page.
+   - proposed (not everyone confirmed) and start time passed → marked "expired" in the sheet and hidden
+   - confirmed → visible until the end of the session (start + SESSION_MINUTES), then hidden
+   Nothing is deleted: the sheet keeps the history. */
 function readBookings_() {
   const sheet = bookingsSheet_();
   const values = sheet.getDataRange().getValues();
-  const now = today_();
-  return values.slice(1)
-    .map(function (r) {
-      return {
-        id: String(r[0]),
-        createdAt: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
-        by: String(r[2]),
-        with: String(r[3]),
-        date: asDate_(r[4]),
-        time: asTime_(r[5]),
-        format: String(r[6]),
-        note: String(r[7]),
-        status: String(r[8] || 'proposed'),
-        third: String(r[9] || ''),
-        confirmedBy: String(r[10] || '').split(',').map(function (x) { return x.trim(); }).filter(String),
-      };
-    })
-    .filter(function (b) { return b.id && b.date >= now && b.status !== 'cancelled'; })
-    .sort(function (a, b) { return (a.date + a.time).localeCompare(b.date + b.time); });
+  const t = Date.now();
+  const out = [];
+  values.slice(1).forEach(function (r, i) {
+    const b = {
+      id: String(r[0]),
+      createdAt: r[1] instanceof Date ? r[1].toISOString() : String(r[1]),
+      by: String(r[2]),
+      with: String(r[3]),
+      date: asDate_(r[4]),
+      time: asTime_(r[5]),
+      format: String(r[6]),
+      note: String(r[7]),
+      status: String(r[8] || 'proposed'),
+      third: String(r[9] || ''),
+      confirmedBy: String(r[10] || '').split(',').map(function (x) { return x.trim(); }).filter(String),
+    };
+    if (!b.id || b.status === 'cancelled' || b.status === 'expired') return;
+    const start = startOf_(b);
+    if (!start) return;
+    if (b.status !== 'confirmed' && start.getTime() <= t) {
+      try { sheet.getRange(i + 2, 9).setValue('expired'); } catch (e) { /* hidden anyway */ }
+      return;
+    }
+    if (b.status === 'confirmed' && start.getTime() + CONFIG.SESSION_MINUTES * 60000 <= t) return;
+    out.push(b);
+  });
+  return out.sort(function (a, b) { return (a.date + a.time).localeCompare(b.date + b.time); });
+}
+
+/* The moment a session starts (stored as Italian date and time) */
+function startOf_(b) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(b.date) || !/^\d{2}:\d{2}$/.test(b.time)) return null;
+  try { return Utilities.parseDate(b.date + ' ' + b.time, CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm'); } catch (e) { return null; }
 }
 
 function all_(b) { return participants_(b); }
@@ -451,6 +469,8 @@ function createBooking(input) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date || '')) throw new Error('ERR_DATE');
     if (!/^\d{2}:\d{2}$/.test(input.time || '')) throw new Error('ERR_TIME');
     if (input.date < today_()) throw new Error('ERR_PAST');
+    const st = startOf_({ date: input.date, time: input.time });
+    if (st && st.getTime() <= Date.now()) throw new Error('ERR_PAST');
 
     const booking = {
       id: Utilities.getUuid().slice(0, 8), by: by, with: withName, third: third, date: input.date, time: input.time,
@@ -481,6 +501,8 @@ function confirmBooking(id, k, lang) {
   return withBooking_(id, function (b, row, sheet) {
     const who = invitees_(b).find(function (n) { return key_(n) === key_(name); });
     if (!who) throw new Error('ERR_ONLY_INVITED');
+    const start = startOf_(b);
+    if (b.status === 'expired' || (start && start.getTime() <= Date.now())) throw new Error('ERR_EXPIRED');
     if (b.confirmedBy.indexOf(who) === -1) b.confirmedBy.push(who);
     const all = invitees_(b).every(function (n) { return b.confirmedBy.indexOf(n) !== -1; });
     sheet.getRange(row, 11).setValue(b.confirmedBy.join(', '));
@@ -519,7 +541,7 @@ function withBooking_(id, change, lang, k) {
       const b = { id: String(r[0]), by: String(r[2]), with: String(r[3]), date: asDate_(r[4]), time: asTime_(r[5]),
         format: String(r[6]), note: String(r[7]), third: String(r[9] || ''),
         confirmedBy: String(r[10] || '').split(',').map(function (x) { return x.trim(); }).filter(String),
-        meet: String(r[11] || ''), eventId: String(r[12] || '') };
+        meet: String(r[11] || ''), eventId: String(r[12] || ''), status: String(r[8] || 'proposed') };
       const out = change(b, i + 1, sheet);
       const data = getData(k);
       data.emailed = notify_(out.event, b, readPeople_(), lang, out.actor, out.everyone);
