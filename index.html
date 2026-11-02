@@ -482,7 +482,7 @@ const STR = {
       ERR_PICK_TWO: 'Scegli le persone dalla lista.', ERR_SELF: 'Non puoi prenotare una sessione con te stesso.',
       ERR_THIRD: 'Il terzo partecipante deve essere una persona diversa.',
       ERR_NOT_YOU: 'Accesso scaduto o non valido: accedi di nuovo.', ERR_PHOTO: 'La foto non è valida o è troppo grande.',
-      ERR_NO_EMAIL: 'Nessuna email registrata per questo nome.', ERR_EXPIRED: 'L\'orario di questa sessione è già passato: non si può più confermare.', ERR_EMAIL: 'Controlla l\'indirizzo email.',
+      ERR_NO_EMAIL: 'Nessuna email registrata per questo nome.', ERR_EXPIRED: 'L\'orario di questa sessione è già passato: non si può più confermare.', ERR_CANCELLED: 'Questa sessione è stata annullata.', ERR_EMAIL: 'Controlla l\'indirizzo email.',
       ERR_SIGNIN: 'Accesso con Google non riuscito. Riprova o ricevi il link via email.',
       ERR_SETUP: 'L\'invio delle email non è ancora attivo. Avvisa chi gestisce l\'app e riprova più tardi.',
       ERR_NETWORK: 'Connessione non riuscita. Controlla la rete e riprova.', ERR_GENERIC: 'Qualcosa non ha funzionato. Riprova tra poco.',
@@ -578,7 +578,7 @@ const STR = {
       ERR_PICK_TWO: 'Choose people from the list.', ERR_SELF: "You can't book a session with yourself.",
       ERR_THIRD: 'The third person must be someone else.',
       ERR_NOT_YOU: 'Your sign-in is missing or no longer valid: please sign in again.', ERR_PHOTO: 'The photo is not valid or is too large.',
-      ERR_NO_EMAIL: 'No email registered for this name.', ERR_EXPIRED: 'This session has already started: it can no longer be confirmed.', ERR_EMAIL: 'Check the email address.',
+      ERR_NO_EMAIL: 'No email registered for this name.', ERR_EXPIRED: 'This session has already started: it can no longer be confirmed.', ERR_CANCELLED: 'This session was cancelled.', ERR_EMAIL: 'Check the email address.',
       ERR_SIGNIN: 'Google sign-in failed. Try again or get the link by email.',
       ERR_SETUP: 'Email sending is not active yet. Let the app organiser know and try again later.',
       ERR_NETWORK: 'Connection failed. Check your network and try again.', ERR_GENERIC: 'Something went wrong. Please try again shortly.',
@@ -953,9 +953,9 @@ function render() { renderMe(); renderPeople(); renderSessions(); }
 /* ---------- Booking dialog ---------- */
 function openBooking(withName, now) {
   if (!myKey()) return openLogin(T().needLogin);
-  const opts = (sel) => state.people.map(p => `<option ${key(p.name)===key(sel)?'selected':''}>${esc(p.name)}</option>`).join('');
   $('b-by').value = state.me;
-  $('b-with').innerHTML = opts(withName);
+  $('b-with').innerHTML = state.people.filter(p => key(p.name) !== key(state.me))
+    .map(p => `<option ${key(p.name)===key(withName)?'selected':''}>${esc(p.name)}</option>`).join('');
   fillThird('');
   $('b-date').min = state.today; $('b-date').value = '';
   $('b-time').value = ''; $('b-note').value = ''; $('b-error').textContent = '';
@@ -1091,8 +1091,11 @@ function sendMyZone() {
   if ((p.tz || '') !== mine) call('setTimeZone', myKey(), MY_TZ).then(() => { p.tz = mine; renderPeople(); }).catch(() => {});
 }
 function apply(data) {
-  state.people = data.people; state.bookings = data.bookings; state.today = data.today; state.online = data.online || [];
-  state.formUrl = FORM_URL || data.formUrl || ''; state.appUrl = data.appUrl || '';
+  if (data.people) state.people = data.people;        // action responses carry only sessions and presence
+  if (data.bookings) state.bookings = data.bookings;
+  if (data.today) state.today = data.today;
+  if (data.online) state.online = data.online;
+  state.formUrl = FORM_URL || data.formUrl || state.formUrl || ''; state.appUrl = data.appUrl || state.appUrl || '';
   render();
   sendMyZone();
 }
@@ -1181,11 +1184,16 @@ document.addEventListener('change', (e) => {
 try { state.freeMins = Number(localStorage.getItem('se-free-mins')) || 60; } catch (e) { state.freeMins = 60; }
 
 /* Every minute, while the page is visible: refresh who is free (a very small request) and drop expired switches */
+let lastNowSig = '';
 setInterval(async () => {
   if (document.visibilityState !== 'visible' || !state.people.length) return;
-  try { { const r = await call('getNow', myKey()); applyNow(r.now); applyOnline(r.online); }; } catch (e) { /* keep what we have */ }
-  if (!document.activeElement || !document.activeElement.matches('[data-free-mins]')) renderPeople();
-  renderSessions();
+  if (myKey()) {   // guests get nothing from this call: no need to ask
+    try { const r = await call('getNow', myKey()); applyNow(r.now); applyOnline(r.online); } catch (e) { /* keep what we have */ }
+  }
+  // redraw the cards only if who is free changed (or a "free until" just ran out)
+  const sig = state.people.filter(p => freeUntil(p)).map(p => p.name + p.freeUntil).join('|');
+  if (sig !== lastNowSig && !(document.activeElement && document.activeElement.matches('[data-free-mins]'))) { lastNowSig = sig; renderPeople(); }
+  const before = state.bookings.length; renderSessions(); if (state.bookings.length !== before) renderMe();
 }, 60000);
 /* Closing the page: tell the engine right away instead of waiting for the 2.5-minute timeout */
 window.addEventListener('pagehide', () => {
@@ -1193,8 +1201,8 @@ window.addEventListener('pagehide', () => {
   try { navigator.sendBeacon(API_URL, new Blob([JSON.stringify({ fn: 'leave', args: [myKey()] })], { type: 'text/plain;charset=utf-8' })); } catch (e) {}
 });
 document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState === 'visible' && state.people.length) {
-    try { { const r = await call('getNow', myKey()); applyNow(r.now); applyOnline(r.online); }; renderPeople(); } catch (e) {}
+  if (document.visibilityState === 'visible' && state.people.length && myKey()) {
+    try { const r = await call('getNow', myKey()); applyNow(r.now); applyOnline(r.online); renderPeople(); renderSessions(); } catch (e) {}
   }
 });
 
@@ -1295,15 +1303,15 @@ function openPhoto() {
   $('photo-dlg').showModal();
 }
 
-/* Square crop, 320 px, JPEG: small enough to store in the sheet */
+/* Square crop, 200 px, JPEG: small enough to store in the sheet and to send to everyone */
 function prepareImage(file) {
   return new Promise((ok, ko) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       const side = Math.min(img.naturalWidth, img.naturalHeight);
-      const c = document.createElement('canvas'); c.width = c.height = 320;
-      c.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 320, 320);
+      const c = document.createElement('canvas'); c.width = c.height = 200;   // avatars are shown at 36–56 px: 200 is plenty, also on retina
+      c.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 200, 200);
       URL.revokeObjectURL(url);
       let q = 0.85, out = c.toDataURL('image/jpeg', q);
       while (out.length > 46000 && q > 0.4) { q -= 0.1; out = c.toDataURL('image/jpeg', q); }

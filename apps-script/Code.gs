@@ -1,5 +1,4 @@
 /** SE Practice Partners · Google Apps Script web app (published automatically from GitHub)
- * SE Practice Partners · Google Apps Script web app
  * Bound to the spreadsheet that collects the form responses.
  * Reads availability from the responses sheet, stores bookings in a "Bookings" sheet.
  * Serves a small JSON API; the page itself is hosted on GitHub Pages (index.html in the repository).
@@ -11,21 +10,21 @@ const CONFIG = {
   APP_URL: 'https://se-practice.mnesti.it',                                // short link to the app (e.g. https://pratica.mnesti.it); empty = Apps Script URL
   RESPONSES_SHEET: '',      // leave empty to auto-detect the sheet with the form responses
   BOOKINGS_SHEET: 'Bookings',
-  PHOTOS_SHEET: 'Photos',
-  NOW_SHEET: 'Now',
-  ZONES_SHEET: 'Zones',
-  MAIL_LOG_SHEET: 'Mail log', // one row per email: when, type, to, subject, result       // time zone of each person, taken from their browser when they sign in           // "free right now" switches: one row per person with the time it ends     // photos uploaded from the app (small JPEGs, one row per person)
+  PHOTOS_SHEET: 'Photos',     // photos uploaded from the app (small JPEGs, one row per person)
+  NOW_SHEET: 'Now',           // "free right now" switches: one row per person with the time it ends
+  ZONES_SHEET: 'Zones',       // per person: time zone, dashboard language, reminders on/off
+  MAIL_LOG_SHEET: 'Mail log', // one row per email: when, type, to, subject, result
   TIMEZONE: 'Europe/Rome',
   MIN_GAP_MINUTES: 90,        // a person can't have two sessions closer than this
-  SEND_EMAILS: true,
+  SEND_EMAILS: true,          // email notifications for proposals, confirmations and cancellations
   CREATE_MEET: true,          // when everyone has confirmed: calendar event + Google Meet link (needs the Calendar service, see ISTRUZIONI)
-  SESSION_MINUTES: 90,
+  SESSION_MINUTES: 90,        // length of a session (calendar event, "still visible" window, digest timing)
   REMIND_HOURS: 24,           // reminder to confirm, this many hours before an unconfirmed session (0 = off)
   DIGEST: true,               // after confirmed sessions end: "X and Y just practised, what about you?" to everyone else
   DIGEST_EVERY_HOURS: 20,     // at most one such email per person per day
   DIGEST_RESERVE: 25,         // daily Gmail quota kept free for proposals/confirmations
   BACKUP_FOLDER: 'SE Practice · backup',   // Drive folder for the nightly .xlsx copies
-  BACKUP_KEEP: 30,            // how many backups to keep        // length of the calendar event          // email notifications for proposals, confirmations and cancellations
+  BACKUP_KEEP: 30,            // how many backups to keep
   SENDER_NAME: 'SE Practice Partners',
 };
 
@@ -52,6 +51,7 @@ function doPost(e) {
 }
 
 function run_(fn, args) {
+  MEMO_ = {};
   if (!Object.prototype.hasOwnProperty.call(API, fn)) return json_({ error: 'ERR_BAD_REQUEST' });
   try { return json_({ data: API[fn].apply(null, args) }); }
   catch (err) { return json_({ error: String(err && err.message || err) }); }
@@ -84,9 +84,26 @@ function getData(k) {
   return out;
 }
 
+/* What the page needs after proposing / confirming / cancelling: sessions and presence, not everyone's photos again */
+function sessionsData_(k) {
+  const viewer = k ? personByKey_(k) : null;
+  const out = { bookings: readBookings_(), today: today_() };
+  if (viewer) { touch_(viewer); out.online = readOnline_(readPeople_()); }
+  return out;
+}
+
 function appUrl_() { return CONFIG.APP_URL || ScriptApp.getService().getUrl(); }
 
+/* Each request is a fresh execution: these memos avoid reading the same sheet or hashing the same name twice */
+var MEMO_ = {};
+
 function readPeople_() {
+  if (MEMO_.people) return MEMO_.people;
+  MEMO_.people = readPeopleFromSheet_();
+  return MEMO_.people;
+}
+
+function readPeopleFromSheet_() {
   const sheet = responsesSheet_();
   const values = sheet.getDataRange().getValues();
   if (values.length < 2) return [];
@@ -186,22 +203,33 @@ function invitees_(b) { return [b.with].concat(b.third ? [b.third] : []); }
    Keys never reach the page in bulk: they only travel in emails sent to that person (…/?me=<key>). */
 
 function salt_() {
+  if (MEMO_.salt) return MEMO_.salt;
   const props = PropertiesService.getScriptProperties();
   var salt = props.getProperty('SALT');
   if (!salt) { salt = Utilities.getUuid() + Utilities.getUuid(); props.setProperty('SALT', salt); }
+  MEMO_.salt = salt;
   return salt;
 }
 
 function personKey_(name) {
-  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt_() + '|' + key_(name));
-  return Utilities.base64EncodeWebSafe(bytes).replace(/[^A-Za-z0-9]/g, '').slice(0, 16);
+  const keys = MEMO_.keys || (MEMO_.keys = {});
+  const n = key_(name);
+  if (!keys[n]) {
+    const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt_() + '|' + n);
+    keys[n] = Utilities.base64EncodeWebSafe(bytes).replace(/[^A-Za-z0-9]/g, '').slice(0, 16);
+  }
+  return keys[n];
 }
 
 function personalUrl_(name) { return appUrl_().replace(/\/?$/, '/') + '?me=' + personKey_(name); }
 
 function personByKey_(k) {
   if (!k) return null;
-  return readPeople_().find(function (p) { return personKey_(p.name) === k; }) || null;
+  if (!MEMO_.byKey) {
+    MEMO_.byKey = {};
+    readPeople_().forEach(function (p) { MEMO_.byKey[personKey_(p.name)] = p; });
+  }
+  return MEMO_.byKey[k] || null;
 }
 
 /* The page calls this when opened from a personal link */
@@ -225,7 +253,8 @@ function signIn(idToken) {
   if (res.getResponseCode() !== 200) throw new Error('ERR_SIGNIN');
   const info = JSON.parse(res.getContentText());
   const verified = info.email_verified === true || info.email_verified === 'true';
-  if (info.aud !== CONFIG.GOOGLE_CLIENT_ID || !verified || Number(info.exp) * 1000 < Date.now()) throw new Error('ERR_SIGNIN');
+  const issuer = info.iss === 'accounts.google.com' || info.iss === 'https://accounts.google.com';
+  if (info.aud !== CONFIG.GOOGLE_CLIENT_ID || !issuer || !verified || Number(info.exp) * 1000 < Date.now()) throw new Error('ERR_SIGNIN');
   const p = readPeople_().find(function (x) { return x.email && key_(x.email) === key_(info.email); });
   if (!p) throw new Error('ERR_NOT_IN_LIST|' + info.email);
   return { name: p.name, key: personKey_(p.name) };
@@ -263,7 +292,7 @@ function sendLink_(p, lang) {
 function uploadPhoto(k, dataUrl) {
   const p = personByKey_(k);
   if (!p) throw new Error('ERR_NOT_YOU');
-  if (!/^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/.test(String(dataUrl || '')) || dataUrl.length > 48000) {
+  if (!/^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/.test(String(dataUrl || '')) || dataUrl.length > 48000) {   // the page sends ~10–25 KB
     throw new Error('ERR_PHOTO');
   }
   const lock = LockService.getScriptLock();
@@ -490,7 +519,7 @@ function createBooking(input) {
 
     bookingsSheet_().appendRow([booking.id, new Date(), booking.by, booking.with, "'" + booking.date, "'" + booking.time,
       booking.format, booking.note, 'proposed', booking.third, '']);
-    const data = getData(input.key);
+    const data = sessionsData_(input.key);
     data.emailed = notify_('proposed', booking, people, input.lang, by);
     return data;
   } finally {
@@ -505,9 +534,11 @@ function confirmBooking(id, k, lang) {
   return withBooking_(id, function (b, row, sheet) {
     const who = invitees_(b).find(function (n) { return key_(n) === key_(name); });
     if (!who) throw new Error('ERR_ONLY_INVITED');
+    if (b.status === 'cancelled') throw new Error('ERR_CANCELLED');
     const start = startOf_(b);
     if (b.status === 'expired' || (start && start.getTime() <= Date.now())) throw new Error('ERR_EXPIRED');
-    if (b.confirmedBy.indexOf(who) === -1) b.confirmedBy.push(who);
+    if (b.confirmedBy.indexOf(who) !== -1) return { unchanged: true };   // double click / second tab: no new emails
+    b.confirmedBy.push(who);
     const all = invitees_(b).every(function (n) { return b.confirmedBy.indexOf(n) !== -1; });
     sheet.getRange(row, 11).setValue(b.confirmedBy.join(', '));
     sheet.getRange(row, 9).setValue(all ? 'confirmed' : 'proposed');
@@ -527,6 +558,7 @@ function cancelBooking(id, k, lang) {
   return withBooking_(id, function (b, row, sheet) {
     const who = participants_(b).find(function (n) { return key_(n) === key_(name); });
     if (!who) throw new Error('ERR_ONLY_PAIR');
+    if (b.status === 'cancelled' || b.status === 'expired') return { unchanged: true };
     sheet.getRange(row, 9).setValue('cancelled');
     if (b.eventId) removeEvent_(b.eventId);
     return { event: 'cancelled', actor: who };
@@ -547,7 +579,8 @@ function withBooking_(id, change, lang, k) {
         confirmedBy: String(r[10] || '').split(',').map(function (x) { return x.trim(); }).filter(String),
         meet: String(r[11] || ''), eventId: String(r[12] || ''), status: String(r[8] || 'proposed') };
       const out = change(b, i + 1, sheet);
-      const data = getData(k);
+      if (out.unchanged) { const same = sessionsData_(k); same.emailed = []; return same; }
+      const data = sessionsData_(k);
       data.emailed = notify_(out.event, b, readPeople_(), lang, out.actor, out.everyone);
       data.scheduled = out.event === 'scheduled';
       data.meet = !!b.meet;
@@ -804,6 +837,7 @@ const DIGEST_MAIL = {
 };
 
 function digestNow() {   // hourly trigger: reminders first, then the digest
+  MEMO_ = {};
   const reminders = remindPending_();
   const digest = runDigest_();
   return 'reminders: ' + reminders + ' · digest: ' + digest;
