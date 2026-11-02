@@ -19,7 +19,8 @@ const CONFIG = {
   SEND_EMAILS: true,          // email notifications for proposals, confirmations and cancellations
   CREATE_MEET: true,          // when everyone has confirmed: calendar event + Google Meet link (needs the Calendar service, see ISTRUZIONI)
   SESSION_MINUTES: 90,        // length of a session (calendar event, "still visible" window, digest timing)
-  SOON_HOURS: 2,              // reminder to everyone, this many hours before a CONFIRMED session (0 = off)
+  SOON_HOURS: 2,
+  START_MINUTES: 15,          // "starting soon" email with the Meet link, about this many minutes before (0 = off)              // reminder to everyone, this many hours before a CONFIRMED session (0 = off)
   REMIND_HOURS: 24,           // reminder to confirm, this many hours before an unconfirmed session (0 = off)
   DIGEST: true,               // after confirmed sessions end: "X and Y just practised, what about you?" to everyone else
   DIGEST_EVERY_HOURS: 20,     // at most one such email per person per day
@@ -29,7 +30,7 @@ const CONFIG = {
   SENDER_NAME: 'SE Practice Partners',
 };
 
-const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by', 'Meet', 'Event', 'Shared', 'Reminded', 'Soon'];
+const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by', 'Meet', 'Event', 'Shared', 'Reminded', 'Soon', 'Starting'];
 
 /* ---------- JSON API used by the page on GitHub Pages ----------
    GET  …/exec?fn=getData                      → data
@@ -51,7 +52,7 @@ function status() {
     const st = startOf_(b);
     return { id: String(r[0]), date: b.date, time: b.time, status: String(r[8] || 'proposed'), invitees: 1 + (r[9] ? 1 : 0),
              confirmations: String(r[10] || '').split(',').filter(function (x) { return x.trim(); }).length,
-             meet: !!r[11], event: !!r[12], reminded: !!r[14], soon: !!r[15], hoursFromNow: st ? Math.round((st.getTime() - t) / 360000) / 10 : null };
+             meet: !!r[11], event: !!r[12], reminded: !!r[14], soon: !!r[15], starting: !!r[16], hoursFromNow: st ? Math.round((st.getTime() - t) / 360000) / 10 : null };
   }).filter(function (x) { return x.hoursFromNow !== null && x.hoursFromNow > -48 && x.hoursFromNow < 72; });
   return { now: new Date().toISOString(), triggers: triggers, triggerVersion: props.getProperty('TRIGGER_VERSION'),
            lastRun: props.getProperty('LAST_RUN'), lastRunResult: props.getProperty('LAST_RUN_RESULT'),
@@ -662,7 +663,8 @@ function createEvent_(b, people, lang) {
       end: { dateTime: localDateTime_(b.date, b.time, CONFIG.SESSION_MINUTES), timeZone: CONFIG.TIMEZONE },
       attendees: emails.map(function (e) { return { email: e }; }),
       guestsCanSeeOtherGuests: true,
-      reminders: { useDefault: true },   // each person's own Google Calendar notification settings
+      // organiser's copy: popup + email 15 min before (participants get their own Calendar defaults with the invitation)
+      reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 15 }, { method: 'email', minutes: 15 }] },
     };
     if (online) {
       resource.conferenceData = { createRequest: { requestId: b.id + '-' + Date.now(), conferenceSolutionKey: { type: 'hangoutsMeet' } } };
@@ -882,10 +884,11 @@ const TRIGGER_VERSION = '2';   // 2 = every 15 minutes (needed for the "in 2 hou
 function digestNow() {   // periodic trigger: reminders, then the digest
   MEMO_ = {};
   upgradeTriggers_();
+  const starting = remindStarting_();
   const soon = remindSoon_();
   const reminders = remindPending_();
   const digest = runDigest_();
-  const result = 'soon: ' + soon + ' · reminders: ' + reminders + ' · digest: ' + digest;
+  const result = 'starting: ' + starting + ' · soon: ' + soon + ' · reminders: ' + reminders + ' · digest: ' + digest;
   const props = PropertiesService.getScriptProperties();
   props.setProperty('LAST_RUN', new Date().toISOString()); props.setProperty('LAST_RUN_RESULT', result);
   return result;
@@ -1167,6 +1170,67 @@ function remindSoon_() {
       try { if (sendLogged_('soon', p.name, p.email, m.subject(v), text, replyOpts_(html, ''), b.id)) sent++; } catch (e) { /* logged */ }
     });
     sheet.getRange(i + 2, 16).setValue(new Date());
+  });
+  return sent + ' emails';
+}
+
+/* ---------- "Starting soon" email, about 15 minutes before a confirmed session ----------
+   The scheduler runs every 15 minutes, so it goes out between ~15 and ~30 minutes before the start. Any hour of the day:
+   it is what people asked for, right before the session. */
+
+const START_MAIL = {
+  it: { subject: function (v) { return 'Sta per iniziare: sessione di pratica SE alle ' + v.time; },
+        lead: function (v) { return 'Tra pochi minuti inizia la tua sessione di pratica con ' + v.others + '.'; },
+        meetButton: 'Entra su Google Meet', appButton: 'Apri l\'app', inPerson: 'La sessione è in presenza.' },
+  en: { subject: function (v) { return 'Starting soon: SE practice session at ' + v.time; },
+        lead: function (v) { return 'Your practice session with ' + v.others + ' starts in a few minutes.'; },
+        meetButton: 'Join on Google Meet', appButton: 'Open the app', inPerson: 'The session is in person.' },
+};
+
+function remindStarting_() {
+  if (!CONFIG.START_MINUTES || !CONFIG.SEND_EMAILS) return 'off';
+  const sheet = bookingsSheet_();
+  const values = sheet.getDataRange().getValues();
+  const t = Date.now();
+  const due = [];
+  values.slice(1).forEach(function (r, i) {
+    if (String(r[8]) !== 'confirmed' || r[16]) return;
+    const b = { id: String(r[0]), by: String(r[2]), with: String(r[3]), date: asDate_(r[4]), time: asTime_(r[5]),
+      format: String(r[6]), note: String(r[7]), third: String(r[9] || ''), meet: String(r[11] || '') };
+    const st = startOf_(b);
+    if (!st) return;
+    const left = st.getTime() - t;
+    if (left > 0 && left <= (CONFIG.START_MINUTES + 15) * 60000) due.push({ row: i + 2, b: b });
+  });
+  if (!due.length) return '0 emails';
+  const people = readPeople_(), langs = readLangs_(), zones = readZones_();
+  const find = function (n) { return people.find(function (p) { return key_(p.name) === key_(n); }) || { name: n }; };
+  const first = function (n) { return String(n).split(/\s+/)[0]; };
+  var sent = 0;
+  due.forEach(function (d) {
+    const b = d.b;
+    participants_(b).forEach(function (name) {
+      const p = find(name);
+      const lang = MAIL[langs[name]] ? langs[name] : 'it';
+      const t1 = MAIL[lang], m = START_MAIL[lang];
+      const join = function (list) { return list.length < 2 ? list.join('') : list.slice(0, -1).join(', ') + ' ' + t1.labels.and + ' ' + list[list.length - 1]; };
+      const tz = zones[name];
+      const shown = tz && tz !== CONFIG.TIMEZONE ? inZone_(b.date, b.time, tz).time : b.time;   // their own clock
+      const v = { others: join(participants_(b).filter(function (n) { return n !== name; }).map(first)), time: timeLabel_(shown, t1.locale) };
+      const rows = [];
+      if (b.meet) rows.push([t1.labels.meet, b.meet]); else rows.push([t1.labels.format, m.inPerson]);
+      if (b.note) rows.push([t1.labels.note, b.note]);
+      const url = b.meet || personalUrl_(name);
+      const table = '<table style="border-collapse:collapse;width:100%;font-size:15px;margin-bottom:20px">' +
+        rows.map(function (x) {
+          return '<tr><td style="padding:8px 0;border-top:1px solid #EFE8EC;color:#6E686B;width:110px;vertical-align:top">' + esc_(x[0]) +
+            '</td><td style="padding:8px 0;border-top:1px solid #EFE8EC">' + esc_(x[1]) + '</td></tr>';
+        }).join('') + '</table>';
+      const html = mailFrame_(m.lead(v), table, url, b.meet ? m.meetButton : m.appButton, t1.footer);
+      const text = [m.lead(v), ''].concat(rows.map(function (x) { return x[0] + ': ' + x[1]; }), ['', url, '', '—', t1.footer]).join('\n');
+      try { if (sendLogged_('starting', p.name, p.email, m.subject(v), text, replyOpts_(html, ''), b.id)) sent++; } catch (e) { /* logged */ }
+    });
+    sheet.getRange(d.row, 17).setValue(new Date());
   });
   return sent + ' emails';
 }

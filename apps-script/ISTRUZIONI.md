@@ -68,6 +68,10 @@ Circa 2 ore prima (`SOON_HOURS`) di una sessione confermata, tutti i partecipant
 pratica con …», con il pulsante **Entra su Google Meet** (o «Apri l'app» se in presenza), l'ora locale per chi è all'estero e la nota.
 Per le sessioni prima delle 9:00 il promemoria arriva **la sera prima** (dopo le 20), mai di notte. Una volta sola (colonna *Soon*).
 
+**«Sta per iniziare»:** circa 15 minuti prima (`START_MINUTES`; arriva tra 15 e 30 minuti prima) tutti i partecipanti ricevono
+un'email con il pulsante **Entra su Google Meet**. Nel tuo Google Calendar l'evento ha anche pop-up ed email 15 minuti prima;
+i partecipanti ricevono le notifiche del loro calendario tramite l'invito di Google.
+
 Il controllo automatico gira **ogni 15 minuti**. Se manca, si installa da solo alla prima apertura dell'app (controllato al massimo ogni 6 ore).
 
 ## Reminder 24 ore prima
