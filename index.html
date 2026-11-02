@@ -480,7 +480,7 @@ const STR = {
     refreshing: 'Aggiorno i dati…', offlineCopy: 'Connessione non riuscita: stai vedendo i dati dell\'ultima visita.',
     loading: 'Carico le disponibilità…', loadingSlow: 'Ancora qualche secondo: sto leggendo il foglio delle risposte…',
     loadError: 'Non è stato possibile caricare i dati:', pickName: 'Scegli il tuo nome.',
-    invite: (v) => `Ciao${v.to ? ' ' + v.to : ''}! ${v.plural ? 'Vi' : 'Ti'} ho proposto una sessione di pratica SE${v.others ? ' insieme a ' + v.others : ''} ${v.when} alle ${v.time} (${v.fmt}).` +
+    invite: (v) => `Ciao${v.to ? ' ' + v.to : ''}! ${v.plural ? 'Vi' : 'Ti'} ho proposto una sessione di pratica SE${v.others ? ' insieme a ' + v.others : ''} ${v.when} alle ${v.time}, ${v.fmt}.` +
       (v.note ? `\nNota: ${v.note}` : '') + `\n${v.plural ? 'Vi va bene? Potete' : 'Ti va bene? Puoi'} confermarla qui: ${v.url}\n${v.from}`,
     on: (d) => d,
     err: {
@@ -579,7 +579,7 @@ const STR = {
     refreshing: 'Updating…', offlineCopy: 'Could not connect: you are seeing the data from your last visit.',
     loading: 'Loading availability…', loadingSlow: 'A few more seconds: reading the responses sheet…',
     loadError: "Couldn't load the data:", pickName: 'Choose your name.',
-    invite: (v) => `Hi${v.to ? ' ' + v.to : ''}! I've proposed an SE practice session with ${v.plural ? 'you both' : 'you'}${v.others ? ' and ' + v.others : ''} ${v.when} at ${v.time} (${v.fmt}).` +
+    invite: (v) => `Hi${v.to ? ' ' + v.to : ''}! I've proposed an SE practice session with ${v.plural ? 'you both' : 'you'}${v.others ? ' and ' + v.others : ''} ${v.when} at ${v.time}, ${v.fmt}.` +
       (v.note ? `\nNote: ${v.note}` : '') + `\nDoes it work for you? You can confirm it here: ${v.url}\n${v.from}`,
     err: {
       ERR_PICK_TWO: 'Choose people from the list.', ERR_SELF: "You can't book a session with yourself.",
@@ -704,6 +704,17 @@ const iAmAbroad = () => zoneDiffH(MY_TZ) !== 0;
 const cityOf = (tz) => tz.split('/').pop().replace(/_/g, ' ');
 const signedH = (h) => (h > 0 ? '+' : h < 0 ? '−' : '±') + Math.abs(h).toString().replace('.5', ',5') + ' h';
 
+/* "19:00" → "19:00 (sera)" / "7:00 pm (evening)": never a doubt between morning and evening */
+function timeLabel(hhmm) {
+  const [h, mi] = String(hhmm).split(':').map(Number);
+  if (isNaN(h)) return String(hhmm);
+  const part = h >= 5 && h < 12 ? 0 : h >= 12 && h < 14 ? 1 : h >= 14 && h < 18 ? 2 : h >= 18 && h < 23 ? 3 : 4;   // same bands as the form
+  const mm = String(mi || 0).padStart(2, '0');
+  if (state.lang === 'en') return `${h % 12 || 12}:${mm} ${h < 12 ? 'am' : 'pm'} (${['morning', 'lunchtime', 'afternoon', 'evening', 'night'][part]})`;
+  return `${h}:${mm} (${['mattina', 'pranzo', 'pomeriggio', 'sera', 'notte'][part]})`;
+}
+const partOfDay = (hhmm) => { const m = timeLabel(hhmm).match(/\(([^)]+)\)/); return m ? m[1] : ''; };
+
 const isConnected = (name) => !!(state.online && state.online.includes(name));
 const freeUntil = (p) => p && p.freeUntil && new Date(p.freeUntil).getTime() > Date.now() ? new Date(p.freeUntil) : null;
 const hhmm = (d) => d.toLocaleTimeString(T().locale, { hour: '2-digit', minute: '2-digit' });
@@ -741,9 +752,9 @@ function inviteText(b, to) {
   const inv = invitees(b);
   const abroad = iAmAbroad() || participants(b).some(n => { const p = person(n); return p && p.tz && zoneDiffH(p.tz) !== 0; });
   const rp = to && person(to);
-  const extra = rp && rp.tz && zoneDiffH(rp.tz) !== 0 ? ', ' + T().yourTime(partsIn(rp.tz, romeInstant(b.date, b.time)).time) : '';
+  const extra = rp && rp.tz && zoneDiffH(rp.tz) !== 0 ? ', ' + T().yourTime(timeLabel(partsIn(rp.tz, romeInstant(b.date, b.time)).time)) : '';
   return T().invite({ to: to ? first(to) : joinNames(inv.map(first)), plural: !to && inv.length > 1, others: to ? joinNames(others) : '', when,
-    time: b.time + (abroad ? ' (' + T().italyTime + extra + ')' : ''),
+    time: timeLabel(b.time) + (abroad ? ' · ' + T().italyTime + extra : ''),
     fmt: tv(b.format).toLowerCase(), note: b.note, url: state.appUrl || '', from: first(b.by) });
 }
 function waInvite(b, to) {
@@ -942,7 +953,7 @@ function renderSessions() {
       const statusLabel = b.status === 'confirmed' ? t.confirmed : done.length ? t.partial(done.length, inv.length) : t.proposed;
       const statusClass = b.status === 'confirmed' ? 'confirmed' : done.length ? 'partial' : 'proposed';
       return `<div class="session">
-        <span class="time">${esc(localOf(b).time)}${iAmAbroad() ? `<br><span class="local-note">${esc(t.inItaly(b.time))}</span>` : ''}</span>
+        <span class="time">${esc(localOf(b).time)}<br><span class="local-note">${esc(partOfDay(localOf(b).time))}</span>${iAmAbroad() ? `<br><span class="local-note">${esc(t.inItaly(timeLabel(b.time)))}</span>` : ''}</span>
         <div class="pair"><strong>${esc(b.by)}</strong> ${esc(t.withWord)} ${inv.map(n => `<strong>${esc(n)}</strong>`).join(' ' + esc(t.and) + ' ')}
           <div class="meta">${esc(tv(b.format))}${b.note ? ' · ' + esc(b.note) : ''}${b.status === 'confirmed' && mine && b.format !== 'In person' ? ' · ' + esc(t.meetByEmail) : ''}</div></div>
         <span class="status ${statusClass}">${esc(statusLabel)}</span>

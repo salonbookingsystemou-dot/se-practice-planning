@@ -747,12 +747,12 @@ function notify_(event, b, people, lang, actor, everyone) {
       const others = event === 'proposed' ? all.filter(function (n) { return n !== actor && n !== name; }) : [];
       const pending = invitees_(b).filter(function (n) { return (b.confirmedBy || []).indexOf(n) === -1; });
       const v = { actor: actor, actorFirst: first(actor), others: joinNames(others), allConfirmed: !!b.allConfirmed,
-                  pending: joinNames(pending), whenShort: d.short + ' ' + b.time, meet: b.meet || '' };
-      const rows = [[t.labels.when, d.long + ' ' + t.labels.at + ' ' + b.time + (abroad ? ' (' + t.labels.italy + ')' : '')]];
+                  pending: joinNames(pending), whenShort: d.short + ' ' + timeLabel_(b.time, t.locale), meet: b.meet || '' };
+      const rows = [[t.labels.when, d.long + ' ' + t.labels.at + ' ' + timeLabel_(b.time, t.locale) + (abroad ? ' · ' + t.labels.italy : '')]];
       const tz = zones[name];
       if (tz && tz !== CONFIG.TIMEZONE) {
         const loc = inZone_(b.date, b.time, tz), ld = dateLabel_(loc.date, t.locale);
-        rows.push([t.labels.local, ld.long + ' ' + t.labels.at + ' ' + loc.time + ' · ' + tz.split('/').pop().replace(/_/g, ' ')]);
+        rows.push([t.labels.local, ld.long + ' ' + t.labels.at + ' ' + timeLabel_(loc.time, t.locale) + ' · ' + tz.split('/').pop().replace(/_/g, ' ')]);
       }
       rows.push([t.labels.format, t.formats[b.format] || b.format]);
       if (all.length > 2 || event === 'scheduled') rows.push([t.labels.who, joinNames(all)]);
@@ -790,6 +790,18 @@ function mailFrame_(lead, inner, url, button, footer) {
     inner +
     '<a href="' + esc_(url) + '" style="display:inline-block;background:#6C1D45;color:#fff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:12px">' + esc_(button) + '</a>' +
     '</div><p style="max-width:520px;margin:16px auto 0;font-size:12px;color:#6E686B;text-align:center">' + esc_(footer) + '</p></div>';
+}
+
+/* "19:00" → "19:00 (sera)" · "07:00" → "7:00 (mattina)" · EN "7:00 pm (evening)": no doubt about morning or evening */
+function timeLabel_(hhmm, locale) {
+  const p = String(hhmm).split(':').map(Number), h = p[0], m = ('0' + (p[1] || 0)).slice(-2);
+  if (isNaN(h)) return String(hhmm);
+  const part = h >= 5 && h < 12 ? 0 : h >= 12 && h < 14 ? 1 : h >= 14 && h < 18 ? 2 : h >= 18 && h < 23 ? 3 : 4;   // same bands as the form
+  if (locale === 'en') {
+    const h12 = h % 12 || 12;
+    return h12 + ':' + m + ' ' + (h < 12 ? 'am' : 'pm') + ' (' + ['morning', 'lunchtime', 'afternoon', 'evening', 'night'][part] + ')';
+  }
+  return h + ':' + m + ' (' + ['mattina', 'pranzo', 'pomeriggio', 'sera', 'notte'][part] + ')';
 }
 
 function dateLabel_(iso, locale) {
@@ -984,14 +996,14 @@ function remindPending_() {
       const join = function (list) { return list.length < 2 ? list.join('') : list.slice(0, -1).join(', ') + ' ' + t1.labels.and + ' ' + list[list.length - 1]; };
       const d = dateLabel_(b.date, t1.locale);
       const v = { by: b.by, byFirst: first(b.by), pending: join(pending.map(first)), many: pending.length > 1,
-                  whenShort: (b.date === todayRome ? m.today : m.tomorrow) + ' ' + b.time };
-      if (b.date !== todayRome && start.getTime() - t > 36 * 3600000) v.whenShort = d.short + ' ' + b.time;
-      const rows = [[t1.labels.when, d.long + ' ' + t1.labels.at + ' ' + b.time], [t1.labels.format, t1.formats[b.format] || b.format],
+                  whenShort: (b.date === todayRome ? m.today : m.tomorrow) + ' ' + timeLabel_(b.time, t1.locale) };
+      if (b.date !== todayRome && start.getTime() - t > 36 * 3600000) v.whenShort = d.short + ' ' + timeLabel_(b.time, t1.locale);
+      const rows = [[t1.labels.when, d.long + ' ' + t1.labels.at + ' ' + timeLabel_(b.time, t1.locale)], [t1.labels.format, t1.formats[b.format] || b.format],
                     [t1.labels.who, join(participants_(b))]];
       const tz = zones[name];
       if (tz && tz !== CONFIG.TIMEZONE) {
         const loc = inZone_(b.date, b.time, tz), ld = dateLabel_(loc.date, t1.locale);
-        rows.splice(1, 0, [t1.labels.local, ld.long + ' ' + t1.labels.at + ' ' + loc.time + ' · ' + tz.split('/').pop().replace(/_/g, ' ')]);
+        rows.splice(1, 0, [t1.labels.local, ld.long + ' ' + t1.labels.at + ' ' + timeLabel_(loc.time, t1.locale) + ' · ' + tz.split('/').pop().replace(/_/g, ' ')]);
       }
       if (b.note) rows.push([t1.labels.note, b.note]);
       const lead = isProposer ? m.byLead(v) : m.invLead(v);
