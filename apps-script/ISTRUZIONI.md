@@ -62,6 +62,16 @@ Nel foglio «Bookings» le colonne *Third* e *Confirmed by* si aggiungono da sol
 - Una sessione **confermata** resta visibile fino alla fine dell'incontro (inizio + `SESSION_MINUTES`), poi esce dall'app.
 - Non si possono proporre sessioni con data e ora già passate.
 
+## Promemoria «hanno appena praticato»
+Quando una sessione **confermata** finisce, tutti gli altri iscritti ricevono un'email: «Dimitri e Branham hanno appena
+concluso una sessione di pratica. Che ne dici di programmarne una anche tu?», con il pulsante che apre l'app già
+riconosciuti e un riquadro per condividere l'app su WhatsApp con chi non è ancora iscritto.
+- Al massimo **una al giorno** per persona (più sessioni finite nello stesso giorno finiscono nella stessa email),
+  solo tra le 8 e le 22, mai a chi ha appena praticato, solo nomi di battesimo.
+- In fondo c'è «Non voglio più ricevere questi promemoria» (salvato nel foglio «Zones», colonna *Reminders*).
+- Restano sempre libere almeno `DIGEST_RESERVE` email della quota Gmail giornaliera per proposte e conferme.
+- **Attivazione:** in Apps Script esegui una volta `installTriggers`. Per spegnere: `DIGEST: false`.
+
 ## Accesso: Google o link personale
 Non c'è più il menu «Io sono»: chi non ha fatto l'accesso può solo guardare.
 - **Accedi con Google**: un clic con l'account usato nel modulo. Il motore verifica con Google la firma dell'accesso
@@ -106,7 +116,7 @@ Per spegnere: `CREATE_MEET: false`.
 ## Sicurezza del foglio e backup
 - Il foglio **non va condiviso** con gli studenti: l'app passa dal motore, che lavora con il tuo account.
   **Condividi → Accesso generale → Con restrizioni** e nessun editor oltre a te.
-- **Backup automatico:** in Apps Script esegui una volta `installBackup`. Ogni notte verso le 3 salva una copia `.xlsx`
+- **Backup automatico:** in Apps Script esegui una volta `installTriggers` (attiva anche il promemoria qui sotto). Ogni notte verso le 3 salva una copia `.xlsx`
   nella cartella Drive «SE Practice · backup» e tiene le ultime 30 (`BACKUP_KEEP`). Backup al volo: esegui `backupNow`.
 - Per tornare indietro di poche ore c'è anche **File → Cronologia versioni** del foglio.
 

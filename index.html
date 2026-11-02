@@ -449,6 +449,7 @@ const STR = {
     inItaly: (t) => `${t} in Italia`, italyTime: 'ora italiana', yourTime: (t) => `da te alle ${t}`,
     tzBadge: (c, h) => `🌍 ${c} · ${h} rispetto all'Italia`, slotsLocal: (n) => `Le fasce di ${n} sono nella sua ora locale.`,
     localTimeHint: (c) => `Data e ora nel tuo fuso (${c}).`,
+    remindersOff: 'Fatto: non riceverai più i promemoria sulle sessioni concluse.',
     online: (n) => `${n} ${n === 1 ? 'connesso' : 'connessi'}`, onlineNow: 'Online adesso', onlineYou: 'tu',
     busySending: 'Invio…', busySaving: 'Salvo…', busyConfirming: 'Confermo…', busyCancelling: 'Annullo…',
     busyStep1: 'Salvo la proposta…', busyStep2: 'Avviso i partecipanti via email…', busyStep3: 'Quasi fatto, ancora un istante…',
@@ -545,6 +546,7 @@ const STR = {
     inItaly: (t) => `${t} in Italy`, italyTime: 'Italian time', yourTime: (t) => `${t} your time`,
     tzBadge: (c, h) => `🌍 ${c} · ${h} vs Italy`, slotsLocal: (n) => `${n}'s time slots are in their local time.`,
     localTimeHint: (c) => `Date and time in your time zone (${c}).`,
+    remindersOff: 'Done: you will no longer get reminders about finished sessions.',
     online: (n) => `${n} online`, onlineNow: 'Online now', onlineYou: 'you',
     busySending: 'Sending…', busySaving: 'Saving…', busyConfirming: 'Confirming…', busyCancelling: 'Cancelling…',
     busyStep1: 'Saving the proposal…', busyStep2: 'Emailing the participants…', busyStep3: 'Almost done, one moment…',
@@ -1100,14 +1102,16 @@ async function recognise() {
   const params = new URLSearchParams(location.search);
   const k = params.get('me');
   if (!k) return;
-  params.delete('me');
+  const stopReminders = params.get('reminders') === 'off';
+  params.delete('me'); params.delete('reminders');
   const q = params.toString();
   try { history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash); } catch (e) {}
   try {
     const who = await call('whoAmI', k);
     if (!who) return;
     if ($('login-dlg').open) $('login-dlg').close();
-    setSession({ name: who.name, key: who.key || k }, true);
+    setSession({ name: who.name, key: who.key || k }, !stopReminders);
+    if (stopReminders) call('setDigest', who.key || k, false).then(() => toast(T().remindersOff)).catch(err => toast(errMsg(err)));
   } catch (e) { /* an invalid link simply leaves the app as it is */ }
 }
 function selectTab(tab) {
@@ -1414,6 +1418,7 @@ function demo(fn, ...args) {
   if (fn === 'requestLink') return { sent: true };
   if (fn === 'setTimeZone') return { tz: args[1] };
   if (fn === 'setLanguage') return { lang: args[1] };
+  if (fn === 'setDigest') return { reminders: !!args[1] };
   if (fn === 'signIn') return { name: 'Luca Bianchi', key: 'demoluca' };
   if (fn === 'uploadPhoto') { const p = db.people.find(x => x.key === args[0]); if (!p) throw new Error('ERR_NOT_YOU'); p.photo = args[1]; }
   if (fn === 'createBooking') {

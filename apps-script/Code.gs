@@ -20,12 +20,15 @@ const CONFIG = {
   SEND_EMAILS: true,
   CREATE_MEET: true,          // when everyone has confirmed: calendar event + Google Meet link (needs the Calendar service, see ISTRUZIONI)
   SESSION_MINUTES: 90,
+  DIGEST: true,               // after confirmed sessions end: "X and Y just practised, what about you?" to everyone else
+  DIGEST_EVERY_HOURS: 20,     // at most one such email per person per day
+  DIGEST_RESERVE: 25,         // daily Gmail quota kept free for proposals/confirmations
   BACKUP_FOLDER: 'SE Practice · backup',   // Drive folder for the nightly .xlsx copies
   BACKUP_KEEP: 30,            // how many backups to keep        // length of the calendar event          // email notifications for proposals, confirmations and cancellations
   SENDER_NAME: 'SE Practice Partners',
 };
 
-const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by', 'Meet', 'Event'];
+const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by', 'Meet', 'Event', 'Shared'];
 
 /* ---------- JSON API used by the page on GitHub Pages ----------
    GET  …/exec?fn=getData                      → data
@@ -33,7 +36,7 @@ const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time',
 
 const API = { getData: getData, createBooking: createBooking, confirmBooking: confirmBooking, cancelBooking: cancelBooking,
               whoAmI: whoAmI, signIn: signIn, requestLink: requestLink, uploadPhoto: uploadPhoto, getNow: getNow, setFreeNow: setFreeNow,
-              setTimeZone: setTimeZone, setLanguage: setLanguage, leave: leave };
+              setTimeZone: setTimeZone, setLanguage: setLanguage, leave: leave, setDigest: setDigest };
 
 function doGet(e) {
   const fn = e && e.parameter && e.parameter.fn;
@@ -438,7 +441,7 @@ function zonesSheet_() {
   var sheet = ss.getSheetByName(CONFIG.ZONES_SHEET);
   if (!sheet) {
     sheet = ss.insertSheet(CONFIG.ZONES_SHEET);
-    sheet.getRange(1, 1, 1, 3).setValues([['Name', 'Time zone', 'Language']]).setFontWeight('bold');
+    sheet.getRange(1, 1, 1, 4).setValues([['Name', 'Time zone', 'Language', 'Reminders']]).setFontWeight('bold');
     sheet.setFrozenRows(1);
   }
   return sheet;
@@ -768,17 +771,149 @@ function testEmail() {
   MailApp.sendEmail(Session.getActiveUser().getEmail(), 'SE Practice Partners · test', 'Email notifications are working.');
 }
 
+/* ---------- "They just practised: what about you?" ----------
+   Hourly trigger. When confirmed sessions have ended, everyone else gets ONE email (at most one a day each),
+   naming who practised (first names only), with their personal link and a WhatsApp share for classmates not yet in. */
+
+const DIGEST_MAIL = {
+  it: {
+    subject: function (n) { return n > 1 ? n + ' sessioni di pratica SE appena concluse: tocca a te? 🌿' : 'Una sessione di pratica SE appena conclusa: tocca a te? 🌿'; },
+    lead: function (groups) { return groups + (groups.indexOf(';') !== -1 ? ' hanno appena concluso le loro sessioni di pratica.' : ' hanno appena concluso una sessione di pratica.'); },
+    ask: 'Che ne dici di programmarne una anche tu? Guarda chi è libero negli stessi giorni e proponi una sessione in un minuto.',
+    button: 'Trova un compagno di pratica',
+    shareTitle: 'Conosci un compagno del corso SE che non ha ancora inserito le sue disponibilità?',
+    shareText: 'Condividi l\'app su WhatsApp: più siamo, più è facile trovare un compagno.',
+    shareButton: 'Condividi su WhatsApp',
+    shareMsg: function (app, form) { return 'Ciao! Per trovare compagni di pratica SE c\'è questa app: ' + app + '\nPrima inserisci le tue disponibilità qui: ' + form; },
+    stop: 'Non voglio più ricevere questi promemoria', and: 'e',
+    footer: 'Ricevi questa email perché hai inserito le tue disponibilità per la pratica SE tra compagni di corso.',
+  },
+  en: {
+    subject: function (n) { return n > 1 ? n + ' SE practice sessions just finished: your turn? 🌿' : 'An SE practice session just finished: your turn? 🌿'; },
+    lead: function (groups) { return groups + (groups.indexOf(';') !== -1 ? ' have just finished their practice sessions.' : ' have just finished a practice session.'); },
+    ask: 'How about planning one too? See who is free on the same days and propose a session in a minute.',
+    button: 'Find a practice partner',
+    shareTitle: 'Do you know an SE classmate who hasn\'t shared their availability yet?',
+    shareText: 'Share the app on WhatsApp: the more we are, the easier it is to find a partner.',
+    shareButton: 'Share on WhatsApp',
+    shareMsg: function (app, form) { return 'Hi! To find SE practice partners there is this app: ' + app + '\nFirst add your availability here: ' + form; },
+    stop: 'Stop these reminders', and: 'and',
+    footer: 'You receive this email because you shared your availability for SE peer practice.',
+  },
+};
+
+function digestNow() {
+  if (!CONFIG.DIGEST || !CONFIG.SEND_EMAILS) return 'off';
+  const hour = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H'));
+  if (hour < 8 || hour >= 22) return 'quiet hours';
+  const props = PropertiesService.getScriptProperties();
+  const last = Number(props.getProperty('DIGEST_LAST') || 0);
+  if (Date.now() - last < CONFIG.DIGEST_EVERY_HOURS * 3600000) return 'already sent today';
+
+  const sheet = bookingsSheet_();
+  const values = sheet.getDataRange().getValues();
+  const t = Date.now();
+  const done = [];
+  values.slice(1).forEach(function (r, i) {
+    if (String(r[8]) !== 'confirmed' || r[13]) return;
+    const b = { by: String(r[2]), with: String(r[3]), third: String(r[9] || ''), date: asDate_(r[4]), time: asTime_(r[5]) };
+    const start = startOf_(b);
+    if (!start) return;
+    const end = start.getTime() + CONFIG.SESSION_MINUTES * 60000;
+    if (end > t) return;
+    if (t - end > 3 * 86400000) { sheet.getRange(i + 2, 14).setValue('too old'); return; }   // never announce stale sessions
+    done.push({ row: i + 2, b: b });
+  });
+  if (!done.length) return 'nothing new';
+
+  const people = readPeople_();
+  const langs = readLangs_();
+  const optOut = readOptOut_();
+  const practised = {};
+  done.forEach(function (d) { participants_(d.b).forEach(function (n) { practised[key_(n)] = true; }); });
+  const first = function (n) { return String(n).split(/\s+/)[0]; };
+  const app = appUrl_(), form = CONFIG.FORM_URL;
+  var count = 0;
+
+  people.forEach(function (p) {
+    if (!p.email || practised[key_(p.name)] || optOut[p.name]) return;
+    if (MailApp.getRemainingDailyQuota() <= CONFIG.DIGEST_RESERVE) return;
+    const lang = DIGEST_MAIL[langs[p.name]] ? langs[p.name] : 'it';
+    const m = DIGEST_MAIL[lang];
+    const join = function (list) { return list.length < 2 ? list.join('') : list.slice(0, -1).join(', ') + ' ' + m.and + ' ' + list[list.length - 1]; };
+    const groups = done.map(function (d) { return join(participants_(d.b).map(first)); }).join('; ');
+    const url = personalUrl_(p.name);
+    const stopUrl = url + '&reminders=off';
+    const wa = 'https://wa.me/?text=' + encodeURIComponent(m.shareMsg(app, form));
+    const inner =
+      '<p style="margin:0 0 20px;font-size:15px;line-height:1.5">' + esc_(m.ask) + '</p>' +
+      '<a href="' + esc_(url) + '" style="display:inline-block;background:#D86018;color:#fff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:12px">' + esc_(m.button) + '</a>' +
+      '<div style="margin-top:26px;padding:16px 18px;border-radius:12px;background:#F3E5EC">' +
+      '<p style="margin:0 0 6px;font-weight:bold;color:#6C1D45">' + esc_(m.shareTitle) + '</p>' +
+      '<p style="margin:0 0 12px;font-size:14px">' + esc_(m.shareText) + '</p>' +
+      '<a href="' + esc_(wa) + '" style="display:inline-block;background:#25D366;color:#fff;text-decoration:none;font-weight:bold;padding:10px 18px;border-radius:10px">' + esc_(m.shareButton) + '</a>' +
+      '<p style="margin:10px 0 0;font-size:13px;color:#6E686B">' + esc_(app) + '</p></div>';
+    const html = digestFrame_(m.lead(groups), inner, m.footer + ' · <a href="' + esc_(stopUrl) + '" style="color:#6E686B">' + esc_(m.stop) + '</a>');
+    const text = [m.lead(groups), '', m.ask, url, '', m.shareTitle, m.shareText, app, '', '—', m.footer, m.stop + ': ' + stopUrl].join('\n');
+    try {
+      if (sendLogged_('digest', p.name, p.email, m.subject(done.length), text, { name: CONFIG.SENDER_NAME, htmlBody: html }, '')) count++;
+    } catch (e) { /* logged */ }
+  });
+
+  done.forEach(function (d) { sheet.getRange(d.row, 14).setValue(new Date()); });
+  props.setProperty('DIGEST_LAST', String(Date.now()));
+  return count + ' emails';
+}
+
+function digestFrame_(lead, inner, footerHtml) {
+  return '<div style="background:#F7F3F5;padding:28px 16px;font-family:Roboto,Helvetica,Arial,sans-serif;color:#3D3D3D">' +
+    '<div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #E5DCE1;border-radius:16px;padding:28px">' +
+    '<p style="margin:0 0 6px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:bold;color:#D86018">SE Practice Partners</p>' +
+    '<p style="margin:0 0 14px;font-family:Comfortaa,Trebuchet MS,Helvetica,sans-serif;font-size:20px;color:#6C1D45;line-height:1.35">' + esc_(lead) + '</p>' +
+    inner + '</div><p style="max-width:520px;margin:16px auto 0;font-size:12px;color:#6E686B;text-align:center">' + footerHtml + '</p></div>';
+}
+
+/* Opt-out of the digest (column D of the Zones sheet) */
+function setDigest(k, on) {
+  const p = actor_(k);
+  const v = on ? '' : 'off';
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = zonesSheet_();
+    const values = sheet.getDataRange().getValues();
+    for (var i = 1; i < values.length; i++) {
+      if (key_(values[i][0]) === key_(p.name)) { sheet.getRange(i + 1, 4).setValue(v); return { reminders: !!on }; }
+    }
+    sheet.appendRow([p.name, '', '', v]);
+    return { reminders: !!on };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function readOptOut_() {
+  const out = {};
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.ZONES_SHEET);
+  if (!sheet) return out;
+  sheet.getDataRange().getValues().slice(1).forEach(function (r) { if (r[0] && String(r[3]) === 'off') out[String(r[0])] = true; });
+  return out;
+}
+
 /* ---------- Nightly backup ----------
    Run installBackup() once from the editor: it schedules backupNow() every night at about 3:00 and makes a first copy.
    The copy is an .xlsx export (copying a form-linked spreadsheet would also duplicate the form). */
 
-function installBackup() {
+/* Run once from the editor: nightly backup + hourly check for finished sessions (digest email) */
+function installTriggers() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'backupNow') ScriptApp.deleteTrigger(t);
+    if (['backupNow', 'digestNow'].indexOf(t.getHandlerFunction()) !== -1) ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('backupNow').timeBased().everyDays(1).atHour(3).inTimezone(CONFIG.TIMEZONE).create();
+  ScriptApp.newTrigger('digestNow').timeBased().everyHours(1).create();
   return backupNow();
 }
+function installBackup() { return installTriggers(); }   // older name, same thing
 
 function backupNow() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
