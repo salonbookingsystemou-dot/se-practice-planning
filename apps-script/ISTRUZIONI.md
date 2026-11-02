@@ -148,8 +148,8 @@ La pagina salva nel browser una copia dei dati dell'ultima visita (massimo 7 gio
 
 ## Feedback post-sessione
 Tab **Feedback**: per ogni sessione confermata e conclusa (ultimi `FEEDBACK_DAYS` giorni) c'è una bacheca di commenti.
-- La vedono e ci scrivono **solo i partecipanti** di quella sessione (`FEEDBACK_PUBLIC: false`; con `true` la leggono tutti
-  gli iscritti, ma scrivono sempre solo i partecipanti). Ognuno può eliminare i propri commenti.
+- Finalità formativa: la **leggono tutti gli studenti che hanno fatto l'accesso**, ci **scrivono solo i partecipanti**
+  di quella sessione (`FEEDBACK_PUBLIC: true`; con `false` la vedono solo i partecipanti). Ognuno può eliminare i propri commenti.
 - A ogni nuovo commento gli altri partecipanti ricevono un'email con il testo e il pulsante «Leggi e rispondi»,
   che apre l'app direttamente sul tab Feedback. I commenti stanno nel foglio «Feedback».
 

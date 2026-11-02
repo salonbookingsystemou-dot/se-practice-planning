@@ -450,11 +450,11 @@ const STR = {
     ctaButton: 'Inserisci le disponibilità →',
     updateText: 'Sono cambiati i tuoi orari?', editData: 'Modifica i tuoi dati',
     tabPeople: 'Persone', tabSessions: 'Sessioni', tabFeedback: 'Feedback',
-    fbIntro: 'Una bacheca per ogni sessione conclusa: com\'è andata, cosa avete notato, cosa vi portate via. La vedono solo i partecipanti di quella sessione.',
-    fbNeedLogin: 'Accedi per vedere e scrivere i feedback delle tue sessioni.', fbNone: 'Qui compariranno le tue sessioni concluse: dopo la prima potrai lasciare un feedback.',
-    fbNoComments: 'Ancora nessun commento: inizia tu.', fbPh: 'Com\'è andata? Cosa ha funzionato, cosa proveresti diversamente…',
+    fbIntro: 'Una bacheca per ogni sessione conclusa, per imparare gli uni dagli altri: cosa ha funzionato nella pratica, quali strumenti avete usato, cosa provereste diversamente. La leggono tutti gli studenti; scrivono i partecipanti della sessione.',
+    fbNeedLogin: 'Accedi per leggere i feedback delle sessioni e scrivere su quelle a cui hai partecipato.', fbNone: 'Qui compariranno le sessioni concluse del gruppo, con i loro feedback.',
+    fbNoComments: 'Ancora nessun commento: inizia tu.', fbPh: 'Cosa ha funzionato nella pratica? Quali strumenti hai usato o osservato? Cosa proveresti diversamente?',
     fbLoading: 'Carico i feedback…', fbPost: 'Pubblica', fbPosting: 'Pubblico…', fbDelete: 'Elimina', fbDeleteAsk: 'Eliminare il tuo commento?', fbPosted: 'Feedback pubblicato.',
-    fbVisible: 'Visibile solo ai partecipanti.', fbWith: (n) => `con ${n}`,
+    fbVisible: 'Lo leggono tutti gli studenti: scrivi della pratica, non di aspetti personali.', fbWith: (n) => `con ${n}`,
     ago: (m) => m < 1 ? 'adesso' : m < 60 ? `${m} min fa` : m < 1440 ? `${Math.round(m / 60)} h fa` : `${Math.round(m / 1440)} g fa`,
     search: 'Cerca per nome o città',
     fFormat: 'Formato', fDay: 'Giorno', fTime: 'Orario', filters: 'Filtri', resetFilters: 'Azzera filtri',
@@ -556,11 +556,11 @@ const STR = {
     ctaButton: 'Add your availability →',
     updateText: 'Changed your schedule?', editData: 'Edit your details',
     tabPeople: 'People', tabSessions: 'Sessions', tabFeedback: 'Post-session feedback',
-    fbIntro: 'A board for each finished session: how it went, what you noticed, what you take away. Only that session\'s participants can see it.',
-    fbNeedLogin: 'Sign in to see and write feedback on your sessions.', fbNone: 'Your finished sessions will appear here: after the first one you can leave feedback.',
-    fbNoComments: 'No comments yet: be the first.', fbPh: 'How did it go? What worked, what would you try differently…',
+    fbIntro: 'A board for each finished session, to learn from each other: what worked in the practice, which tools you used, what you would try differently. All students can read it; the session\'s participants write.',
+    fbNeedLogin: 'Sign in to read session feedback and write on the sessions you took part in.', fbNone: 'Finished sessions of the group will appear here, with their feedback.',
+    fbNoComments: 'No comments yet: be the first.', fbPh: 'What worked in the practice? Which tools did you use or observe? What would you try differently?',
     fbLoading: 'Loading feedback…', fbPost: 'Post', fbPosting: 'Posting…', fbDelete: 'Delete', fbDeleteAsk: 'Delete your comment?', fbPosted: 'Feedback posted.',
-    fbVisible: 'Visible to participants only.', fbWith: (n) => `with ${n}`,
+    fbVisible: 'All students can read this: write about the practice, not personal matters.', fbWith: (n) => `with ${n}`,
     ago: (m) => m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`,
     search: 'Search by name or city',
     fFormat: 'Format', fDay: 'Day', fTime: 'Time', filters: 'Filters', resetFilters: 'Clear filters',
@@ -1219,10 +1219,11 @@ function renderFeedback() {
   const draft = {}; box.querySelectorAll('textarea[data-fb]').forEach(x => { draft[x.dataset.fb] = x.value; });   // keep what people are typing
   box.innerHTML = list.map(s => {
     const loc = localOf(s), title = fmtDate(loc.date);
-    const others = participants(s).filter(n => key(n) !== key(state.me)).map(first);
+    const mine = participants(s).some(n => key(n) === key(state.me));
+    const others = participants(s).filter(n => !mine || key(n) !== key(state.me)).map(first);
     return `<article class="fb-session" id="fb-${esc(s.id)}">
       <div class="fb-head"><h3>${esc(title.charAt(0).toUpperCase() + title.slice(1))} · ${esc(timeLabel(loc.time))}</h3>
-        <span class="meta">${esc(t.fbWith(joinNames(others)))} · ${esc(tv(s.format))}</span></div>
+        <span class="meta">${esc(mine ? t.fbWith(joinNames(others)) : joinNames(others))} · ${esc(tv(s.format))}</span></div>
       <div class="fb-list">${s.comments.length ? s.comments.map(c => `
         <div class="fb-item ${c.mine ? 'mine' : ''}">${avatar(c.author)}
           <div class="fb-bubble"><div class="fb-meta"><strong>${esc(first(c.author))}</strong><span>${esc(t.ago(Math.round((Date.now() - new Date(c.at)) / 60000)))}</span>
