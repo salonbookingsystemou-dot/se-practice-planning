@@ -62,6 +62,14 @@ Nel foglio «Bookings» le colonne *Third* e *Confirmed by* si aggiungono da sol
 - Una sessione **confermata** resta visibile fino alla fine dell'incontro (inizio + `SESSION_MINUTES`), poi esce dall'app.
 - Non si possono proporre sessioni con data e ora già passate.
 
+## Reminder 24 ore prima
+Se mancano 24 ore (`REMIND_HOURS`) a una sessione non ancora confermata da tutti:
+- ogni invitato che non ha confermato riceve «Conferma la sessione di domani alle 19:00 con Dimitri: senza conferma
+  verrà annullata», con il pulsante che apre l'app già riconosciuti (rispondendo si scrive a chi ha proposto);
+- chi ha proposto riceve l'avviso di chi manca all'appello.
+Una volta sola per sessione (colonna *Reminded* in «Bookings»), tra le 8 e le 22, mai nelle prime 3 ore dalla proposta.
+Gira nello stesso controllo orario del promemoria qui sotto (`installTriggers`). Per spegnere: `REMIND_HOURS: 0`.
+
 ## Promemoria «hanno appena praticato»
 Quando una sessione **confermata** finisce, tutti gli altri iscritti ricevono un'email: «Dimitri e Branham hanno appena
 concluso una sessione di pratica. Che ne dici di programmarne una anche tu?», con il pulsante che apre l'app già

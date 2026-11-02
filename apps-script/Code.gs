@@ -20,6 +20,7 @@ const CONFIG = {
   SEND_EMAILS: true,
   CREATE_MEET: true,          // when everyone has confirmed: calendar event + Google Meet link (needs the Calendar service, see ISTRUZIONI)
   SESSION_MINUTES: 90,
+  REMIND_HOURS: 24,           // reminder to confirm, this many hours before an unconfirmed session (0 = off)
   DIGEST: true,               // after confirmed sessions end: "X and Y just practised, what about you?" to everyone else
   DIGEST_EVERY_HOURS: 20,     // at most one such email per person per day
   DIGEST_RESERVE: 25,         // daily Gmail quota kept free for proposals/confirmations
@@ -28,7 +29,7 @@ const CONFIG = {
   SENDER_NAME: 'SE Practice Partners',
 };
 
-const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by', 'Meet', 'Event', 'Shared'];
+const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by', 'Meet', 'Event', 'Shared', 'Reminded'];
 
 /* ---------- JSON API used by the page on GitHub Pages ----------
    GET  …/exec?fn=getData                      → data
@@ -802,7 +803,13 @@ const DIGEST_MAIL = {
   },
 };
 
-function digestNow() {
+function digestNow() {   // hourly trigger: reminders first, then the digest
+  const reminders = remindPending_();
+  const digest = runDigest_();
+  return 'reminders: ' + reminders + ' · digest: ' + digest;
+}
+
+function runDigest_() {
   if (!CONFIG.DIGEST || !CONFIG.SEND_EMAILS) return 'off';
   const hour = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H'));
   if (hour < 8 || hour >= 22) return 'quiet hours';
@@ -871,6 +878,102 @@ function digestFrame_(lead, inner, footerHtml) {
     '<p style="margin:0 0 6px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:bold;color:#D86018">SE Practice Partners</p>' +
     '<p style="margin:0 0 14px;font-family:Comfortaa,Trebuchet MS,Helvetica,sans-serif;font-size:20px;color:#6C1D45;line-height:1.35">' + esc_(lead) + '</p>' +
     inner + '</div><p style="max-width:520px;margin:16px auto 0;font-size:12px;color:#6E686B;text-align:center">' + footerHtml + '</p></div>';
+}
+
+/* ---------- 24 h reminder for sessions not yet confirmed ---------- */
+
+const REMIND_MAIL = {
+  it: {
+    invSubject: function (v) { return 'Conferma la sessione di ' + v.whenShort + ' con ' + v.byFirst; },
+    invLead: function (v) { return 'La sessione di pratica proposta da ' + v.by + ' non è ancora confermata.'; },
+    invAction: 'Se non la confermi entro l\'orario d\'inizio, verrà annullata automaticamente.',
+    invButton: 'Conferma la sessione',
+    bySubject: function (v) { return 'Sessione di ' + v.whenShort + ': manca la conferma di ' + v.pending; },
+    byLead: function (v) { return v.pending + (v.many ? ' non hanno' : ' non ha') + ' ancora confermato la sessione che hai proposto.'; },
+    byAction: 'Se la conferma non arriva entro l\'orario d\'inizio, la sessione verrà annullata. Puoi ricordarlo anche su WhatsApp.',
+    byButton: 'Apri l\'app', tomorrow: 'domani alle', today: 'oggi alle',
+  },
+  en: {
+    invSubject: function (v) { return 'Confirm the session ' + v.whenShort + ' with ' + v.byFirst; },
+    invLead: function (v) { return 'The practice session proposed by ' + v.by + ' is not confirmed yet.'; },
+    invAction: 'If you don\'t confirm it before it starts, it will be cancelled automatically.',
+    invButton: 'Confirm the session',
+    bySubject: function (v) { return 'Session ' + v.whenShort + ': waiting for ' + v.pending; },
+    byLead: function (v) { return v.pending + (v.many ? ' have' : ' has') + ' not confirmed the session you proposed yet.'; },
+    byAction: 'If the confirmation doesn\'t arrive before it starts, the session will be cancelled. You can also remind them on WhatsApp.',
+    byButton: 'Open the app', tomorrow: 'tomorrow at', today: 'today at',
+  },
+};
+
+function replyOpts_(html, replyTo) {
+  const o = { name: CONFIG.SENDER_NAME, htmlBody: html };
+  if (replyTo) o.replyTo = replyTo;
+  return o;
+}
+
+function remindPending_() {
+  if (!CONFIG.REMIND_HOURS || !CONFIG.SEND_EMAILS) return 'off';
+  const hour = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H'));
+  if (hour < 8 || hour >= 22) return 'quiet hours';
+  const sheet = bookingsSheet_();
+  const values = sheet.getDataRange().getValues();
+  const t = Date.now();
+  const people = readPeople_(), langs = readLangs_(), zones = readZones_();
+  const find = function (n) { return people.find(function (p) { return key_(p.name) === key_(n); }) || { name: n }; };
+  const first = function (n) { return String(n).split(/\s+/)[0]; };
+  const todayRome = today_();
+  var sent = 0;
+
+  values.slice(1).forEach(function (r, i) {
+    if (String(r[8] || 'proposed') !== 'proposed' || r[14]) return;
+    const b = { id: String(r[0]), by: String(r[2]), with: String(r[3]), date: asDate_(r[4]), time: asTime_(r[5]),
+      format: String(r[6]), note: String(r[7]), third: String(r[9] || ''),
+      confirmedBy: String(r[10] || '').split(',').map(function (x) { return x.trim(); }).filter(String) };
+    const start = startOf_(b);
+    if (!start || start.getTime() <= t || start.getTime() - t > CONFIG.REMIND_HOURS * 3600000) return;
+    const created = r[1] && typeof r[1].getTime === 'function' ? r[1].getTime() : (Date.parse(r[1]) || 0);
+    if (created && t - created < 3 * 3600000) return;   // just proposed: the proposal email is enough
+    const pending = invitees_(b).filter(function (n) { return b.confirmedBy.indexOf(n) === -1; });
+    if (!pending.length) return;
+
+    const send = function (name, isProposer) {
+      const p = find(name);
+      const lang = MAIL[langs[name]] ? langs[name] : 'it';
+      const t1 = MAIL[lang], m = REMIND_MAIL[lang];
+      const join = function (list) { return list.length < 2 ? list.join('') : list.slice(0, -1).join(', ') + ' ' + t1.labels.and + ' ' + list[list.length - 1]; };
+      const d = dateLabel_(b.date, t1.locale);
+      const v = { by: b.by, byFirst: first(b.by), pending: join(pending.map(first)), many: pending.length > 1,
+                  whenShort: (b.date === todayRome ? m.today : m.tomorrow) + ' ' + b.time };
+      if (b.date !== todayRome && start.getTime() - t > 36 * 3600000) v.whenShort = d.short + ' ' + b.time;
+      const rows = [[t1.labels.when, d.long + ' ' + t1.labels.at + ' ' + b.time], [t1.labels.format, t1.formats[b.format] || b.format],
+                    [t1.labels.who, join(participants_(b))]];
+      const tz = zones[name];
+      if (tz && tz !== CONFIG.TIMEZONE) {
+        const loc = inZone_(b.date, b.time, tz), ld = dateLabel_(loc.date, t1.locale);
+        rows.splice(1, 0, [t1.labels.local, ld.long + ' ' + t1.labels.at + ' ' + loc.time + ' · ' + tz.split('/').pop().replace(/_/g, ' ')]);
+      }
+      if (b.note) rows.push([t1.labels.note, b.note]);
+      const lead = isProposer ? m.byLead(v) : m.invLead(v);
+      const action = isProposer ? m.byAction : m.invAction;
+      const url = personalUrl_(name);
+      const table = '<table style="border-collapse:collapse;width:100%;font-size:15px;margin-bottom:20px">' +
+        rows.map(function (x) {
+          return '<tr><td style="padding:8px 0;border-top:1px solid #EFE8EC;color:#6E686B;width:110px;vertical-align:top">' + esc_(x[0]) +
+            '</td><td style="padding:8px 0;border-top:1px solid #EFE8EC">' + esc_(x[1]) + '</td></tr>';
+        }).join('') + '</table>' +
+        '<p style="margin:0 0 18px;font-size:15px;padding:10px 12px;border-radius:10px;background:#FBE9DD;color:#9A410C">' + esc_(action) + '</p>';
+      const html = mailFrame_(lead, table, url, isProposer ? m.byButton : m.invButton, t1.footer);
+      const text = [lead, ''].concat(rows.map(function (x) { return x[0] + ': ' + x[1]; }), ['', action, url, '', '—', t1.footer]).join('\n');
+      try {
+        if (sendLogged_('reminder', p.name, p.email, isProposer ? m.bySubject(v) : m.invSubject(v), text,
+            replyOpts_(html, isProposer ? '' : find(b.by).email), b.id)) sent++;
+      } catch (e) { /* logged */ }
+    };
+    pending.forEach(function (n) { send(n, false); });
+    send(b.by, true);
+    sheet.getRange(i + 2, 15).setValue(new Date());
+  });
+  return sent + ' emails';
 }
 
 /* Opt-out of the digest (column D of the Zones sheet) */
