@@ -72,6 +72,7 @@ function doPost(e) {
 
 function run_(fn, args) {
   MEMO_ = {};
+  ensureScheduler_();
   if (!Object.prototype.hasOwnProperty.call(API, fn)) return json_({ error: 'ERR_BAD_REQUEST' });
   try { return json_({ data: API[fn].apply(null, args) }); }
   catch (err) { return json_({ error: String(err && err.message || err) }); }
@@ -661,13 +662,14 @@ function createEvent_(b, people, lang) {
       end: { dateTime: localDateTime_(b.date, b.time, CONFIG.SESSION_MINUTES), timeZone: CONFIG.TIMEZONE },
       attendees: emails.map(function (e) { return { email: e }; }),
       guestsCanSeeOtherGuests: true,
-      reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 15 }] },
+      reminders: { useDefault: true },   // each person's own Google Calendar notification settings
     };
     if (online) {
       resource.conferenceData = { createRequest: { requestId: b.id + '-' + Date.now(), conferenceSolutionKey: { type: 'hangoutsMeet' } } };
     }
-    // sendUpdates "none": our own email carries the details, so nobody gets two messages
-    const ev = Calendar.Events.insert(resource, 'primary', { conferenceDataVersion: 1, sendUpdates: 'none' });
+    // sendUpdates "all": Google sends its own invitation, so the event (with the Meet link and Google's reminders)
+    // shows up in every participant's calendar, not only in the organiser's
+    const ev = Calendar.Events.insert(resource, 'primary', { conferenceDataVersion: 1, sendUpdates: 'all' });
     const video = ((ev.conferenceData && ev.conferenceData.entryPoints) || []).find(function (e) { return e.entryPointType === 'video'; });
     return { eventId: ev.id, meet: ev.hangoutLink || (video && video.uri) || '' };
   } catch (e) {
@@ -678,7 +680,7 @@ function createEvent_(b, people, lang) {
 
 function removeEvent_(eventId) {
   if (typeof Calendar === 'undefined') return;
-  try { Calendar.Events.remove('primary', eventId, { sendUpdates: 'none' }); }
+  try { Calendar.Events.remove('primary', eventId, { sendUpdates: 'all' }); }
   catch (e) { console.error('Calendar event not removed: ' + e); }
 }
 
@@ -887,6 +889,28 @@ function digestNow() {   // periodic trigger: reminders, then the digest
   const props = PropertiesService.getScriptProperties();
   props.setProperty('LAST_RUN', new Date().toISOString()); props.setProperty('LAST_RUN_RESULT', result);
   return result;
+}
+
+/* The reminders need the 15-minute trigger. If it is missing (installTriggers never run), any visit to the app installs it.
+   Checked at most once every 6 hours, so it costs nothing on normal requests. */
+function ensureScheduler_() {
+  const props = PropertiesService.getScriptProperties();
+  const checked = Number(props.getProperty('SCHEDULER_CHECKED') || 0);
+  if (props.getProperty('TRIGGER_VERSION') === TRIGGER_VERSION && Date.now() - checked < 6 * 3600000) return;
+  try {
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(3000)) return;
+    try {
+      const handlers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); });
+      if (handlers.indexOf('digestNow') === -1 || props.getProperty('TRIGGER_VERSION') !== TRIGGER_VERSION) {
+        ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'digestNow') ScriptApp.deleteTrigger(t); });
+        ScriptApp.newTrigger('digestNow').timeBased().everyMinutes(15).create();
+        props.setProperty('TRIGGER_VERSION', TRIGGER_VERSION);
+      }
+      if (handlers.indexOf('backupNow') === -1) ScriptApp.newTrigger('backupNow').timeBased().everyDays(1).atHour(3).inTimezone(CONFIG.TIMEZONE).create();
+      props.setProperty('SCHEDULER_CHECKED', String(Date.now()));
+    } finally { lock.releaseLock(); }
+  } catch (e) { console.error('Scheduler check failed: ' + e); }
 }
 
 /* Older installs ran this hourly: switch to every 15 minutes by itself, once */

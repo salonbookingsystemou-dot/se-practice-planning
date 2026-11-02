@@ -68,7 +68,7 @@ Circa 2 ore prima (`SOON_HOURS`) di una sessione confermata, tutti i partecipant
 pratica con …», con il pulsante **Entra su Google Meet** (o «Apri l'app» se in presenza), l'ora locale per chi è all'estero e la nota.
 Per le sessioni prima delle 9:00 il promemoria arriva **la sera prima** (dopo le 20), mai di notte. Una volta sola (colonna *Soon*).
 
-Il controllo automatico gira **ogni 15 minuti** (le installazioni precedenti, che giravano ogni ora, si aggiornano da sole).
+Il controllo automatico gira **ogni 15 minuti**. Se manca, si installa da solo alla prima apertura dell'app (controllato al massimo ogni 6 ore).
 
 ## Reminder 24 ore prima
 Se mancano 24 ore (`REMIND_HOURS`) a una sessione non ancora confermata da tutti:
@@ -115,7 +115,8 @@ della pagina (o dopo 2,5 minuti) e sta solo nella memoria temporanea del motore:
 Quando **tutti** gli invitati hanno confermato, lo script crea nel tuo Google Calendar un evento (durata `SESSION_MINUTES`,
 90 minuti) con i partecipanti come invitati e, per le sessioni online, un **link Google Meet**. Poi manda a tutti
 un'email «Sessione confermata» con il pulsante «Entra su Google Meet». Se la sessione viene annullata, l'evento si cancella.
-Il link Meet arriva solo via email: non compare nella pagina.
+Google Calendar manda anche il suo invito a ogni partecipante: l'evento con il Meet compare nel loro calendario,
+con le loro notifiche abituali. Il link Meet non compare nella pagina.
 
 **Attivazione (una volta):** in Apps Script, a sinistra, **Servizi → +** → **Google Calendar API** → **Aggiungi**
 (identificatore `Calendar`). Poi esegui una funzione qualsiasi (per esempio `testEmail`), autorizza il calendario
