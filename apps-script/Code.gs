@@ -56,7 +56,7 @@ function status() {
   }).filter(function (x) { return x.hoursFromNow !== null && x.hoursFromNow > -48 && x.hoursFromNow < 72; });
   return { now: new Date().toISOString(), triggers: triggers, triggerVersion: props.getProperty('TRIGGER_VERSION'),
            lastRun: props.getProperty('LAST_RUN'), lastRunResult: props.getProperty('LAST_RUN_RESULT'),
-           calendarService: typeof Calendar !== 'undefined', mailQuota: quota, sessions: sessions };
+           calendarService: typeof Calendar !== 'undefined', mailQuota: quota, sessions: sessions, mailLog: mailLogSummary_() };
 }
 
 function doGet(e) {
@@ -77,6 +77,15 @@ function run_(fn, args) {
   if (!Object.prototype.hasOwnProperty.call(API, fn)) return json_({ error: 'ERR_BAD_REQUEST' });
   try { return json_({ data: API[fn].apply(null, args) }); }
   catch (err) { return json_({ error: String(err && err.message || err) }); }
+}
+
+/* Last emails: type, result, time, session — no names or addresses */
+function mailLogSummary_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.MAIL_LOG_SHEET);
+  if (!sheet) return [];
+  return sheet.getDataRange().getValues().slice(1).slice(-40).map(function (r) {
+    return { at: r[0] instanceof Date ? r[0].toISOString() : String(r[0]), type: String(r[1]), result: String(r[5]), session: String(r[6] || '') };
+  });
 }
 
 function json_(obj) {
