@@ -15,7 +15,8 @@ const CONFIG = {
   ZONES_SHEET: 'Zones',       // per person: time zone, dashboard language, reminders on/off
   FEEDBACK_SHEET: 'Feedback',  // post-session comments: one row per comment
   FEEDBACK_DAYS: 90,          // sessions shown on the feedback board (days back)
-  FEEDBACK_PUBLIC: true,      // true = every signed-in student reads all boards (training purpose); only participants write
+  FEEDBACK_PUBLIC: true,
+  KB_SHEET: 'Risorse',        // knowledge base: notes, articles, videos… shared by students (read: every signed-in student)      // true = every signed-in student reads all boards (training purpose); only participants write
   MAIL_LOG_SHEET: 'Mail log', // one row per email: when, type, to, subject, result
   TIMEZONE: 'Europe/Rome',
   MIN_GAP_MINUTES: 90,        // a person can't have two sessions closer than this
@@ -42,7 +43,8 @@ const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time',
 const API = { getData: getData, createBooking: createBooking, confirmBooking: confirmBooking, cancelBooking: cancelBooking,
               whoAmI: whoAmI, signIn: signIn, requestLink: requestLink, uploadPhoto: uploadPhoto, getNow: getNow, setFreeNow: setFreeNow,
               setTimeZone: setTimeZone, setLanguage: setLanguage, leave: leave, setDigest: setDigest, status: status,
-              getFeedback: getFeedback, addFeedback: addFeedback, deleteFeedback: deleteFeedback };
+              getFeedback: getFeedback, addFeedback: addFeedback, deleteFeedback: deleteFeedback,
+              getResources: getResources, addResource: addResource, deleteResource: deleteResource };
 
 /* Health check without personal data: is the scheduler alive, are Gmail/Calendar usable, what happened to recent sessions */
 function status() {
@@ -711,7 +713,7 @@ function addFeedback(k, sessionId, text, lang) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    feedbackSheet_().appendRow([Utilities.getUuid().slice(0, 8), b.id, me.name, new Date(), body]);
+    feedbackSheet_().appendRow([Utilities.getUuid().slice(0, 8), b.id, me.name, new Date(), cell_(body)]);
   } finally { lock.releaseLock(); }
   notifyFeedback_(b, me, body, lang);
   return getFeedback(k);
@@ -732,6 +734,69 @@ function deleteFeedback(k, commentId) {
     }
   } finally { lock.releaseLock(); }
   return getFeedback(k);
+}
+
+/* Text typed by students must never become a formula in the sheet */
+function cell_(v) { v = String(v || ''); return /^[=+\-@\t\r]/.test(v) ? "'" + v : v; }
+
+/* ---------- Knowledge base ----------
+   Notes, articles, videos and other resources shared by students. Every signed-in student reads and adds; only the author deletes. */
+
+const KB_CATS = ['notes', 'article', 'video', 'book', 'exercise', 'other'];
+
+function kbSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CONFIG.KB_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.KB_SHEET);
+    sheet.getRange(1, 1, 1, 7).setValues([['ID', 'Author', 'When', 'Category', 'Title', 'Text', 'Link']]).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function getResources(k) {
+  const me = actor_(k);
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.KB_SHEET);
+  const items = !sheet ? [] : sheet.getDataRange().getValues().slice(1).filter(function (r) { return r[0]; }).map(function (r) {
+    return { id: String(r[0]), author: String(r[1]), at: r[2] && typeof r[2].getTime === 'function' ? r[2].toISOString() : String(r[2]),
+             cat: KB_CATS.indexOf(String(r[3])) >= 0 ? String(r[3]) : 'other', title: String(r[4]), text: String(r[5]), link: String(r[6] || ''),
+             mine: key_(r[1]) === key_(me.name) };
+  });
+  return { items: items.sort(function (a, b) { return b.at.localeCompare(a.at); }) };
+}
+
+function addResource(k, item) {
+  const me = actor_(k);
+  item = item || {};
+  const title = String(item.title || '').trim(), text = String(item.text || '').trim(), link = String(item.link || '').trim();
+  const cat = KB_CATS.indexOf(String(item.cat)) >= 0 ? String(item.cat) : 'other';
+  if (!title || (!text && !link)) throw new Error('ERR_EMPTY');
+  if (title.length > 150 || text.length > 4000 || link.length > 500) throw new Error('ERR_TOO_LONG');
+  if (link && !/^https?:\/\/[^\s]+$/i.test(link)) throw new Error('ERR_LINK');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    kbSheet_().appendRow([Utilities.getUuid().slice(0, 8), me.name, new Date(), cat, cell_(title), cell_(text), link]);
+  } finally { lock.releaseLock(); }
+  return getResources(k);
+}
+
+function deleteResource(k, id) {
+  const me = actor_(k);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = kbSheet_();
+    const values = sheet.getDataRange().getValues();
+    for (var i = 1; i < values.length; i++) {
+      if (String(values[i][0]) !== String(id)) continue;
+      if (key_(values[i][1]) !== key_(me.name)) throw new Error('ERR_NOT_YOURS');
+      sheet.deleteRow(i + 1);
+      break;
+    }
+  } finally { lock.releaseLock(); }
+  return getResources(k);
 }
 
 const FEEDBACK_MAIL = {

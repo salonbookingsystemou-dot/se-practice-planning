@@ -206,6 +206,24 @@
   .fb-form textarea { min-height: 70px; resize: vertical; }
   .fb-form .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
   .fb-form .hint { margin: 0; }
+  .kb-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+  .kb-bar .search { flex: 1 1 220px; }
+  .kb-cats { margin-bottom: 18px; }
+  .kb-new { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 18px 20px; margin-bottom: 18px; display: grid; gap: 12px; }
+  .kb-new .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .kb-new textarea { min-height: 110px; resize: vertical; }
+  .kb-list { display: grid; gap: 14px; }
+  .kb-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px 20px; }
+  .kb-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .kb-badge { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); background: var(--accent-soft); border-radius: 99px; padding: 3px 9px; }
+  .kb-item h3 { font: 600 17px var(--serif); margin: 0 0 6px; color: var(--ink); overflow-wrap: anywhere; }
+  .kb-item h3 a { color: var(--accent); }
+  .kb-host { font-size: 12px; color: var(--muted); margin: -2px 0 8px; overflow-wrap: anywhere; }
+  .kb-text { margin: 0 0 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.55; }
+  .kb-text.clamp { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+  .kb-more { background: none; border: 0; padding: 0; margin: -6px 0 12px; color: var(--accent); cursor: pointer; font-size: 13px; }
+  .kb-foot { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .kb-foot .avatar, .kb-foot .avatar.photo { width: 28px; height: 28px; font-size: 11px; }
   .empty, .loading, .error { text-align: center; padding: 48px 20px; color: var(--muted); background: var(--surface); border: 1px dashed var(--border); border-radius: var(--r-lg); }
   .error { color: var(--danger); border-style: solid; }
 
@@ -341,6 +359,7 @@
     <button class="tab" role="tab" id="tab-people" aria-selected="true" aria-controls="panel-people"><span data-i18n="tabPeople"></span><span class="count" id="c-people">0</span></button>
     <button class="tab" role="tab" id="tab-sessions" aria-selected="false" aria-controls="panel-sessions"><span data-i18n="tabSessions"></span><span class="count" id="c-sessions">0</span></button>
     <button class="tab" role="tab" id="tab-feedback" aria-selected="false" aria-controls="panel-feedback"><span data-i18n="tabFeedback"></span><span class="count" id="c-feedback" hidden></span></button>
+    <button class="tab" role="tab" id="tab-kb" hidden aria-selected="false" aria-controls="panel-kb"><span data-i18n="tabKb"></span><span class="count" id="c-kb" hidden></span></button>
   </div>
 
   <section id="panel-people" role="tabpanel" aria-labelledby="tab-people">
@@ -368,6 +387,11 @@
   <section id="panel-feedback" role="tabpanel" aria-labelledby="tab-feedback" hidden>
     <p class="fb-intro" data-i18n="fbIntro"></p>
     <div id="feedback"></div>
+  </section>
+
+  <section id="panel-kb" role="tabpanel" aria-labelledby="tab-kb" hidden>
+    <p class="fb-intro" data-i18n="kbIntro"></p>
+    <div id="kb"></div>
   </section>
 </div>
 
@@ -474,6 +498,13 @@ const STR = {
     fbNoComments: 'Ancora nessun commento: inizia tu.', fbPh: 'Cosa ha funzionato nella pratica? Quali strumenti hai usato o osservato? Cosa proveresti diversamente?',
     fbLoading: 'Carico i feedback…', fbPost: 'Pubblica', fbPosting: 'Pubblico…', fbDelete: 'Elimina', fbDeleteAsk: 'Eliminare il tuo commento?', fbPosted: 'Feedback pubblicato.',
     fbVisible: 'Lo leggono tutti gli studenti: scrivi della pratica, non di aspetti personali.', fbWith: (n) => `con ${n}`,
+    tabKb: 'Knowledge base', kbIntro: 'Appunti, note e risorse utili alla formazione, condivisi dal gruppo: articoli, video, libri, esercizi. La leggono e la arricchiscono tutti gli studenti.',
+    kbNeedLogin: 'Accedi per leggere e condividere appunti e risorse del gruppo.', kbNone: 'Ancora nessuna risorsa: condividi tu la prima.', kbNoMatch: 'Nessuna risorsa corrisponde alla ricerca.',
+    kbLoading: 'Carico le risorse…', kbAdd: '+ Condividi una risorsa', kbSearch: 'Cerca negli appunti e nelle risorse', kbAll: 'Tutte',
+    kbCats: { notes: 'Appunti', article: 'Articolo', video: 'Video', book: 'Libro', exercise: 'Esercizio', other: 'Altro' },
+    kbCat: 'Tipo', kbTitle: 'Titolo', kbTitlePh: 'Es. Appunti modulo 1 – titolazione', kbText: 'Testo o descrizione', kbTextPh: 'I tuoi appunti, o perché questa risorsa è utile…',
+    kbLink: 'Link (facoltativo)', kbPost: 'Pubblica', kbPosting: 'Pubblico…', kbCancel: 'Annulla', kbPosted: 'Risorsa condivisa.', kbDelete: 'Elimina', kbDeleteAsk: 'Eliminare questa risorsa?',
+    kbHint: 'La vedono tutti gli studenti. Non caricare materiali protetti del corso: condividi i tuoi appunti o link pubblici.', kbMore: 'Mostra tutto', kbLess: 'Mostra meno',
     ago: (m) => m < 1 ? 'adesso' : m < 60 ? `${m} min fa` : m < 1440 ? `${Math.round(m / 60)} h fa` : `${Math.round(m / 1440)} g fa`,
     search: 'Cerca per nome o città',
     fFormat: 'Formato', fDay: 'Giorno', fTime: 'Orario', filters: 'Filtri', resetFilters: 'Azzera filtri',
@@ -547,7 +578,7 @@ const STR = {
       ERR_PICK_TWO: 'Scegli le persone dalla lista.', ERR_SELF: 'Non puoi prenotare una sessione con te stesso.',
       ERR_THIRD: 'Il terzo partecipante deve essere una persona diversa.',
       ERR_NOT_YOU: 'Accesso scaduto o non valido: accedi di nuovo.', ERR_PHOTO: 'La foto non è valida o è troppo grande.',
-      ERR_NO_EMAIL: 'Nessuna email registrata per questo nome.', ERR_EMPTY: 'Scrivi qualcosa prima di pubblicare.', ERR_TOO_LONG: 'Il commento è troppo lungo (massimo 1500 caratteri).', ERR_NOT_YOURS: 'Puoi eliminare solo i tuoi commenti.', ERR_EXPIRED: 'L\'orario di questa sessione è già passato: non si può più confermare.', ERR_CANCELLED: 'Questa sessione è stata annullata.', ERR_EMAIL: 'Controlla l\'indirizzo email.',
+      ERR_NO_EMAIL: 'Nessuna email registrata per questo nome.', ERR_EMPTY: 'Scrivi qualcosa prima di pubblicare.', ERR_TOO_LONG: 'Il commento è troppo lungo (massimo 1500 caratteri).', ERR_NOT_YOURS: 'Puoi eliminare solo i tuoi contenuti.', ERR_LINK: 'Il link deve iniziare con https://', ERR_EXPIRED: 'L\'orario di questa sessione è già passato: non si può più confermare.', ERR_CANCELLED: 'Questa sessione è stata annullata.', ERR_EMAIL: 'Controlla l\'indirizzo email.',
       ERR_SIGNIN: 'Accesso con Google non riuscito. Riprova o ricevi il link via email.',
       ERR_SETUP: 'L\'invio delle email non è ancora attivo. Avvisa chi gestisce l\'app e riprova più tardi.',
       ERR_NETWORK: 'Connessione non riuscita. Controlla la rete e riprova.', ERR_GENERIC: 'Qualcosa non ha funzionato. Riprova tra poco.',
@@ -580,6 +611,13 @@ const STR = {
     fbNoComments: 'No comments yet: be the first.', fbPh: 'What worked in the practice? Which tools did you use or observe? What would you try differently?',
     fbLoading: 'Loading feedback…', fbPost: 'Post', fbPosting: 'Posting…', fbDelete: 'Delete', fbDeleteAsk: 'Delete your comment?', fbPosted: 'Feedback posted.',
     fbVisible: 'All students can read this: write about the practice, not personal matters.', fbWith: (n) => `with ${n}`,
+    tabKb: 'Knowledge base', kbIntro: 'Notes and resources useful for the training, shared by the group: articles, videos, books, exercises. Every student can read and add to it.',
+    kbNeedLogin: 'Sign in to read and share the group\'s notes and resources.', kbNone: 'No resources yet: share the first one.', kbNoMatch: 'No resource matches your search.',
+    kbLoading: 'Loading resources…', kbAdd: '+ Share a resource', kbSearch: 'Search notes and resources', kbAll: 'All',
+    kbCats: { notes: 'Notes', article: 'Article', video: 'Video', book: 'Book', exercise: 'Exercise', other: 'Other' },
+    kbCat: 'Type', kbTitle: 'Title', kbTitlePh: 'E.g. Module 1 notes – titration', kbText: 'Text or description', kbTextPh: 'Your notes, or why this resource is useful…',
+    kbLink: 'Link (optional)', kbPost: 'Post', kbPosting: 'Posting…', kbCancel: 'Cancel', kbPosted: 'Resource shared.', kbDelete: 'Delete', kbDeleteAsk: 'Delete this resource?',
+    kbHint: 'All students can see it. Don\'t upload protected course materials: share your own notes or public links.', kbMore: 'Show all', kbLess: 'Show less',
     ago: (m) => m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`,
     search: 'Search by name or city',
     fFormat: 'Format', fDay: 'Day', fTime: 'Time', filters: 'Filters', resetFilters: 'Clear filters',
@@ -652,7 +690,7 @@ const STR = {
       ERR_PICK_TWO: 'Choose people from the list.', ERR_SELF: "You can't book a session with yourself.",
       ERR_THIRD: 'The third person must be someone else.',
       ERR_NOT_YOU: 'Your sign-in is missing or no longer valid: please sign in again.', ERR_PHOTO: 'The photo is not valid or is too large.',
-      ERR_NO_EMAIL: 'No email registered for this name.', ERR_EMPTY: 'Write something before posting.', ERR_TOO_LONG: 'The comment is too long (1500 characters max).', ERR_NOT_YOURS: 'You can only delete your own comments.', ERR_EXPIRED: 'This session has already started: it can no longer be confirmed.', ERR_CANCELLED: 'This session was cancelled.', ERR_EMAIL: 'Check the email address.',
+      ERR_NO_EMAIL: 'No email registered for this name.', ERR_EMPTY: 'Write something before posting.', ERR_TOO_LONG: 'The comment is too long (1500 characters max).', ERR_NOT_YOURS: 'You can only delete your own posts.', ERR_LINK: 'The link must start with https://', ERR_EXPIRED: 'This session has already started: it can no longer be confirmed.', ERR_CANCELLED: 'This session was cancelled.', ERR_EMAIL: 'Check the email address.',
       ERR_SIGNIN: 'Google sign-in failed. Try again or get the link by email.',
       ERR_SETUP: 'Email sending is not active yet. Let the app organiser know and try again later.',
       ERR_NETWORK: 'Connection failed. Check your network and try again.', ERR_GENERIC: 'Something went wrong. Please try again shortly.',
@@ -1037,7 +1075,7 @@ function renderSessions() {
   }).join('');
 }
 
-function render() { renderMe(); renderPeople(); renderSessions(); }
+function render() { $('tab-kb').hidden = !myKey(); renderMe(); renderPeople(); renderSessions(); }
 
 /* ---------- Booking dialog ---------- */
 function openBooking(withName, now) {
@@ -1152,8 +1190,12 @@ function setSession(sess, greet) {
   try { sess ? localStorage.setItem('se-session', JSON.stringify(sess)) : localStorage.removeItem('se-session'); localStorage.removeItem('se-key'); } catch (e) {}
   state.tzSent = false;
   if (!sess) { state.people.forEach(p => { delete p.freeUntil; }); state.online = []; }
-  state.feedback = null;
-  if (!$('panel-feedback').hidden) loadFeedback(true);   // signed out: no more "free now" info
+  state.feedback = null; state.kb = null;
+  if (!$('panel-feedback').hidden) loadFeedback(true);
+  // the knowledge base exists only for signed-in students
+  $('tab-kb').hidden = !sess;
+  if (!sess && !$('panel-kb').hidden) selectTab('people');
+  else if (!$('panel-kb').hidden) loadKb(true);
   render();
   if (sess) {
     if (greet) toast(T().welcome(first(sess.name)));
@@ -1199,7 +1241,7 @@ async function recognise() {
   if (!k) return;
   const stopReminders = params.get('reminders') === 'off';
   params.delete('me'); params.delete('reminders');
-  if (params.get('tab') === 'feedback') { params.delete('tab'); state.openFeedback = true; }
+  if (['feedback', 'kb'].includes(params.get('tab'))) { state.openFeedback = params.get('tab'); params.delete('tab'); }
   const q = params.toString();
   try { history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash); } catch (e) {}
   try {
@@ -1207,17 +1249,22 @@ async function recognise() {
     if (!who) return;
     if ($('login-dlg').open) $('login-dlg').close();
     setSession({ name: who.name, key: who.key || k }, !stopReminders);
-    if (state.openFeedback) { state.openFeedback = false; selectTab('feedback'); }
+    if (state.openFeedback) { selectTab(state.openFeedback); state.openFeedback = false; }
     if (stopReminders) call('setDigest', who.key || k, false).then(() => toast(T().remindersOff)).catch(err => toast(errMsg(err)));
   } catch (e) { /* an invalid link simply leaves the app as it is */ }
 }
 function selectTab(tab) {
-  ['people', 'sessions', 'feedback'].forEach(x => {
+  ['people', 'sessions', 'feedback', 'kb'].forEach(x => {
     $('tab-' + x).setAttribute('aria-selected', String(tab === x));
     $('panel-' + x).hidden = tab !== x;
   });
   if (tab === 'feedback') loadFeedback();
+  if (tab === 'kb') { if (!myKey()) return selectTab('people'); loadKb(); }
 }
+
+/* Small avatar for boards (feedback, knowledge base) */
+function avatar(name) { const p = person(name);
+  return p && p.photo ? `<img class="avatar photo" src="${esc(p.photo)}" alt="">` : `<span class="avatar" style="background:${tone(name)}" aria-hidden="true">${esc(initials(name))}</span>`; }
 
 /* ---------- Post-session feedback ---------- */
 state.feedback = null;
@@ -1234,8 +1281,6 @@ function renderFeedback() {
   const total = list.reduce((n, s) => n + s.comments.length, 0);
   $('c-feedback').hidden = !total; $('c-feedback').textContent = total;
   if (!list.length) { box.innerHTML = `<div class="empty">${esc(t.fbNone)}</div>`; return; }
-  const avatar = (name) => { const p = person(name);
-    return p && p.photo ? `<img class="avatar photo" src="${esc(p.photo)}" alt="">` : `<span class="avatar" style="background:${tone(name)}" aria-hidden="true">${esc(initials(name))}</span>`; };
   const draft = {}; box.querySelectorAll('textarea[data-fb]').forEach(x => { draft[x.dataset.fb] = x.value; });   // keep what people are typing
   box.innerHTML = list.map(s => {
     const loc = localOf(s), title = fmtDate(loc.date);
@@ -1276,6 +1321,89 @@ document.addEventListener('click', async (e) => {
   catch (err) { del.disabled = false; toast(errMsg(err)); }
 });
 
+/* ---------- Knowledge base ---------- */
+state.kb = null; state.kbCat = null; state.kbQ = ''; state.kbOpen = false; state.kbExpanded = {};
+const KB_CATS = ['notes', 'article', 'video', 'book', 'exercise', 'other'];
+const safeLink = (u) => { try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.href : ''; } catch (e) { return ''; } };
+async function loadKb(force) {
+  const box = $('kb');
+  if (!myKey()) { box.innerHTML = `<div class="empty">${esc(T().kbNeedLogin)} <button class="btn btn-small" data-login="1">${esc(T().signIn)}</button></div>`; return; }
+  if (state.kb && !force) renderKb();
+  else box.innerHTML = `<div class="loader-status" role="status"><span class="spinner" aria-hidden="true"></span><span>${esc(T().kbLoading)}</span></div>`;
+  try { state.kb = (await call('getResources', myKey())).items; renderKb(); }
+  catch (err) { if (!state.kb) box.innerHTML = `<div class="error">${esc(errMsg(err))}</div>`; }
+}
+function kbFormHtml(t) {
+  return `<form class="kb-new" id="kb-form">
+    <div class="field"><label>${esc(t.kbCat)}</label><div class="chips" id="kb-form-cat">${KB_CATS.map((c, i) =>
+      `<button type="button" class="chip" data-kb-fcat="${c}" aria-pressed="${i === 0}">${esc(t.kbCats[c])}</button>`).join('')}</div></div>
+    <div class="field"><label for="kb-title">${esc(t.kbTitle)}</label><input id="kb-title" maxlength="150" required placeholder="${esc(t.kbTitlePh)}"></div>
+    <div class="field"><label for="kb-text">${esc(t.kbText)}</label><textarea id="kb-text" maxlength="4000" placeholder="${esc(t.kbTextPh)}"></textarea></div>
+    <div class="field"><label for="kb-link">${esc(t.kbLink)}</label><input id="kb-link" type="url" maxlength="500" placeholder="https://"></div>
+    <p class="hint">${esc(t.kbHint)}</p>
+    <div class="row"><button type="button" class="btn-text" id="kb-cancel">${esc(t.kbCancel)}</button><button type="submit" class="btn btn-small">${esc(t.kbPost)}</button></div>
+  </form>`;
+}
+function renderKb() {
+  const t = T(), box = $('kb'), all = state.kb || [];
+  $('c-kb').hidden = !all.length; $('c-kb').textContent = all.length;
+  const q = state.kbQ.trim().toLowerCase();
+  const list = all.filter(r => (!state.kbCat || r.cat === state.kbCat) &&
+    (!q || (r.title + ' ' + r.text + ' ' + r.author + ' ' + r.link).toLowerCase().includes(q)));
+  const keepFocus = document.activeElement && document.activeElement.id === 'kb-q';
+  const items = list.map(r => {
+    const href = safeLink(r.link), long = r.text.length > 420 || r.text.split('\n').length > 6, open = state.kbExpanded[r.id];
+    let host = ''; try { host = href ? new URL(href).hostname.replace(/^www\./, '') : ''; } catch (e) {}
+    return `<article class="kb-item">
+      <div class="kb-top"><span class="kb-badge">${esc(t.kbCats[r.cat] || t.kbCats.other)}</span></div>
+      <h3>${href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(r.title)} ↗</a>` : esc(r.title)}</h3>
+      ${host ? `<p class="kb-host">${esc(host)}</p>` : ''}
+      ${r.text ? `<p class="kb-text ${long && !open ? 'clamp' : ''}">${esc(r.text)}</p>` : ''}
+      ${long ? `<button type="button" class="kb-more" data-kb-more="${esc(r.id)}">${esc(open ? t.kbLess : t.kbMore)}</button>` : ''}
+      <div class="kb-foot">${avatar(r.author)}<strong>${esc(first(r.author))}</strong><span>· ${esc(t.ago(Math.round((Date.now() - new Date(r.at)) / 60000)))}</span>
+        ${r.mine ? `<button type="button" class="fb-del" data-kb-del="${esc(r.id)}">${esc(t.kbDelete)}</button>` : ''}</div>
+    </article>`;
+  }).join('');
+  box.innerHTML = `
+    <div class="kb-bar"><input type="search" class="search" id="kb-q" placeholder="${esc(t.kbSearch)}" aria-label="${esc(t.kbSearch)}" value="${esc(state.kbQ)}">
+      ${state.kbOpen ? '' : `<button type="button" class="btn btn-small" id="kb-add">${esc(t.kbAdd)}</button>`}</div>
+    ${state.kbOpen ? kbFormHtml(t) : ''}
+    <div class="chips kb-cats"><button type="button" class="chip" data-kb-cat="" aria-pressed="${!state.kbCat}">${esc(t.kbAll)}</button>${KB_CATS.map(c =>
+      `<button type="button" class="chip" data-kb-cat="${c}" aria-pressed="${state.kbCat === c}">${esc(t.kbCats[c])}</button>`).join('')}</div>
+    ${list.length ? `<div class="kb-list">${items}</div>` : `<div class="empty">${esc(all.length ? t.kbNoMatch : t.kbNone)}</div>`}`;
+  if (keepFocus) { const i = $('kb-q'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+}
+document.addEventListener('input', (e) => { if (e.target.id === 'kb-q') { state.kbQ = e.target.value; renderKb(); } });
+document.addEventListener('click', async (e) => {
+  const el = e.target.closest('#kb-add, #kb-cancel, [data-kb-cat], [data-kb-fcat], [data-kb-more], [data-kb-del]');
+  if (!el) return;
+  if (el.id === 'kb-add') { state.kbOpen = true; renderKb(); $('kb-title').focus(); return; }
+  if (el.id === 'kb-cancel') { state.kbOpen = false; renderKb(); return; }
+  if (el.dataset.kbFcat) { $('kb-form-cat').querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', String(c === el))); return; }
+  if ('kbCat' in el.dataset) { state.kbCat = el.dataset.kbCat || null; renderKb(); return; }
+  if (el.dataset.kbMore) { state.kbExpanded[el.dataset.kbMore] = !state.kbExpanded[el.dataset.kbMore]; renderKb(); return; }
+  if (el.dataset.kbDel) {
+    if (!confirm(T().kbDeleteAsk)) return;
+    el.disabled = true;
+    try { state.kb = (await call('deleteResource', myKey(), el.dataset.kbDel)).items; renderKb(); }
+    catch (err) { el.disabled = false; toast(errMsg(err)); }
+  }
+});
+document.addEventListener('submit', async (e) => {
+  if (e.target.id !== 'kb-form') return;
+  e.preventDefault();
+  const sel = $('kb-form-cat').querySelector('[aria-pressed=true]');
+  const item = { cat: sel ? sel.dataset.kbFcat : 'other', title: $('kb-title').value.trim(), text: $('kb-text').value.trim(), link: $('kb-link').value.trim() };
+  if (!item.title) return $('kb-title').focus();
+  if (!item.text && !item.link) return $('kb-text').focus();
+  if (item.link && !safeLink(item.link)) { toast(T().err.ERR_LINK); return $('kb-link').focus(); }
+  const done = busy(e.target.querySelector('button[type=submit]'), T().kbPosting);
+  try {
+    state.kb = (await call('addResource', myKey(), item)).items;
+    done(); state.kbOpen = false; state.kbCat = null; state.kbQ = ''; renderKb(); toast(T().kbPosted);
+  } catch (err) { done(); toast(errMsg(err)); }
+});
+
 $('q').oninput = (e) => { state.q = e.target.value; updateFilterUI(); renderPeople(); };
 $('f-toggle').onclick = () => setFiltersOpen($('filters').hidden);
 $('f-reset').onclick = () => {
@@ -1289,6 +1417,7 @@ $('f-reset').onclick = () => {
 $('tab-people').onclick = () => selectTab('people');
 $('tab-sessions').onclick = () => selectTab('sessions');
 $('tab-feedback').onclick = () => selectTab('feedback');
+$('tab-kb').onclick = () => selectTab('kb');
 document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => setLang(b.dataset.lang));
 
 /* ---------- Free right now ---------- */
@@ -1605,6 +1734,16 @@ function demo(fn, ...args) {
     if (fn === 'addFeedback') demo.fb.find(s => s.id === args[1]).comments.push({ id: String(Date.now()), author: actor(args[0]), at: new Date().toISOString(), mine: true, text: args[2] });
     if (fn === 'deleteFeedback') demo.fb.forEach(s => { s.comments = s.comments.filter(c => c.id !== args[1]); });
     return { sessions: JSON.parse(JSON.stringify(demo.fb)) };
+  }
+  if (fn === 'getResources' || fn === 'addResource' || fn === 'deleteResource') {
+    const me = actor(args[0]);
+    if (!demo.kb) demo.kb = [
+      { id: 'r1', author: 'Anna Rossi', at: new Date(Date.now() - 26 * 3600e3).toISOString(), cat: 'notes', title: 'Appunti modulo 1 – orientamento e risorse', link: '',
+        text: 'Orientamento: lasciare che lo sguardo esplori lo spazio, seguendo l\'interesse.\nRisorse interne ed esterne: chiedere al cliente cosa lo sostiene, notare la risposta nel corpo.\nTitolazione: lavorare a piccole dosi, tornare spesso alla risorsa.\nPendolazione tra attivazione e risorsa.\nTracking delle sensazioni.\nRitmo lento, pause frequenti.\nChiusura della sessione con radicamento.' },
+      { id: 'r2', author: 'Luca Bianchi', at: new Date(Date.now() - 3 * 3600e3).toISOString(), cat: 'video', title: 'Polyvagal theory, introduzione', link: 'https://www.youtube.com/watch?v=example', text: 'Un\'ora chiara e ben fatta, utile per ripassare la parte teorica.' }];
+    if (fn === 'addResource') demo.kb.unshift({ id: String(Date.now()), author: me, at: new Date().toISOString(), ...args[1] });
+    if (fn === 'deleteResource') demo.kb = demo.kb.filter(r => r.id !== args[1]);
+    return { items: demo.kb.map(r => ({ ...r, mine: r.author === me })) };
   }
   if (fn === 'getNow') return { online: args[0] ? ['Anna Rossi', 'Luca Bianchi'] : [], now: args[0] ? Object.fromEntries(db.people.filter(p => p.freeUntil).map(p => [p.name, p.freeUntil])) : {} };
   if (fn === 'getData' && !args[0]) { const c = JSON.parse(JSON.stringify(db)); c.people.forEach(p => delete p.freeUntil); return c; }

@@ -153,6 +153,12 @@ Tab **Feedback**: per ogni sessione confermata e conclusa (ultimi `FEEDBACK_DAYS
 - A ogni nuovo commento gli altri partecipanti ricevono un'email con il testo e il pulsante «Leggi e rispondi»,
   che apre l'app direttamente sul tab Feedback. I commenti stanno nel foglio «Feedback».
 
+## Knowledge base
+Tab **Knowledge base**, visibile solo agli studenti che hanno fatto l'accesso: appunti, articoli, video, libri, esercizi
+condivisi dal gruppo, con ricerca e filtro per tipo. Tutti leggono e aggiungono; ognuno può eliminare solo le proprie risorse.
+I contenuti stanno nel foglio «Risorse» (creato da solo alla prima pubblicazione). Link accettati solo `http(s)://`.
+Link diretto al tab: `?tab=kb` insieme al link personale.
+
 ## Prova senza dati veri
 Apri `index.html` dal computer, oppure `se-practice.mnesti.it/?demo`: usa dati di esempio e non scrive nulla.
 
