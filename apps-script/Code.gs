@@ -37,7 +37,26 @@ const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time',
 
 const API = { getData: getData, createBooking: createBooking, confirmBooking: confirmBooking, cancelBooking: cancelBooking,
               whoAmI: whoAmI, signIn: signIn, requestLink: requestLink, uploadPhoto: uploadPhoto, getNow: getNow, setFreeNow: setFreeNow,
-              setTimeZone: setTimeZone, setLanguage: setLanguage, leave: leave, setDigest: setDigest };
+              setTimeZone: setTimeZone, setLanguage: setLanguage, leave: leave, setDigest: setDigest, status: status };
+
+/* Health check without personal data: is the scheduler alive, are Gmail/Calendar usable, what happened to recent sessions */
+function status() {
+  const props = PropertiesService.getScriptProperties();
+  var triggers = [];
+  try { triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); }); } catch (e) { triggers = ['error: ' + e.message]; }
+  var quota = null; try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { quota = 'error: ' + e.message; }
+  const t = Date.now();
+  const sessions = bookingsSheet_().getDataRange().getValues().slice(1).map(function (r) {
+    const b = { date: asDate_(r[4]), time: asTime_(r[5]) };
+    const st = startOf_(b);
+    return { id: String(r[0]), date: b.date, time: b.time, status: String(r[8] || 'proposed'), invitees: 1 + (r[9] ? 1 : 0),
+             confirmations: String(r[10] || '').split(',').filter(function (x) { return x.trim(); }).length,
+             meet: !!r[11], event: !!r[12], reminded: !!r[14], soon: !!r[15], hoursFromNow: st ? Math.round((st.getTime() - t) / 360000) / 10 : null };
+  }).filter(function (x) { return x.hoursFromNow !== null && x.hoursFromNow > -48 && x.hoursFromNow < 72; });
+  return { now: new Date().toISOString(), triggers: triggers, triggerVersion: props.getProperty('TRIGGER_VERSION'),
+           lastRun: props.getProperty('LAST_RUN'), lastRunResult: props.getProperty('LAST_RUN_RESULT'),
+           calendarService: typeof Calendar !== 'undefined', mailQuota: quota, sessions: sessions };
+}
 
 function doGet(e) {
   const fn = e && e.parameter && e.parameter.fn;
@@ -864,7 +883,10 @@ function digestNow() {   // periodic trigger: reminders, then the digest
   const soon = remindSoon_();
   const reminders = remindPending_();
   const digest = runDigest_();
-  return 'soon: ' + soon + ' · reminders: ' + reminders + ' · digest: ' + digest;
+  const result = 'soon: ' + soon + ' · reminders: ' + reminders + ' · digest: ' + digest;
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('LAST_RUN', new Date().toISOString()); props.setProperty('LAST_RUN_RESULT', result);
+  return result;
 }
 
 /* Older installs ran this hourly: switch to every 15 minutes by itself, once */
