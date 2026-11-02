@@ -85,6 +85,11 @@
   .filter-toggle .count { margin-left: 0; background: var(--accent); color: #fff; }
   .filter-toggle .chev { transition: transform .15s; font-size: 12px; }
   .filter-toggle[aria-expanded=true] .chev { transform: rotate(180deg); }
+  .fswitch { display: none; position: relative; width: 36px; height: 20px; border-radius: 999px; background: var(--border); transition: background .15s; flex-shrink: 0; }
+  .fswitch i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+  .filter-toggle[aria-expanded=true] .fswitch { background: var(--accent); }
+  .filter-toggle[aria-expanded=true] .fswitch i { transform: translateX(16px); }
+  @media (max-width: 600px) { .filter-toggle .chev { display: none; } .fswitch { display: inline-block; } }
   .btn-text { background: none; border: 0; color: var(--accent); font-weight: 600; cursor: pointer; padding: 8px 4px; }
   .btn-text:hover { text-decoration: underline; }
   .filters { display: grid; gap: 12px; margin-bottom: 24px; background: var(--surface); border: 1px solid var(--border);
@@ -245,6 +250,7 @@
   .chip-now { display: inline-flex; align-items: center; gap: 6px; }
   .chip-now .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ochre); }
   @media (prefers-reduced-motion: reduce) { .free-badge .dot { animation: none; } .switch .track, .switch .track::after { transition: none; } }
+  .online-chip b { font-weight: 700; }
   .online-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink);
                  background: var(--surface); border: 1px solid var(--border); border-radius: 99px; padding: 5px 11px; cursor: pointer; position: relative; }
   .online-dot { width: 8px; height: 8px; border-radius: 50%; background: #2E9E5B; box-shadow: 0 0 0 3px rgba(46,158,91,.18); flex-shrink: 0; }
@@ -278,6 +284,19 @@
   .lang button { border: 0; background: none; border-radius: 99px; padding: 5px 12px; font-size: 12px; font-weight: 600; letter-spacing: .06em; cursor: pointer; color: var(--muted); }
   .lang button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent); }
   @media (max-width: 600px) {
+    header.top { display: flex; flex-direction: column; align-items: stretch; gap: 14px; margin-bottom: 20px; }
+    header.top .side { order: -1; width: 100%; min-width: 0; flex-direction: row; align-items: center; justify-content: space-between;
+                       gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+    .side .lang { order: 2; align-self: center; flex-shrink: 0; }
+    .side .account { order: 1; justify-content: flex-start; flex-wrap: nowrap; min-width: 0; gap: 8px; min-height: 40px; }
+    .account .who-mini { min-width: 0; gap: 8px; font-size: 15px; }
+    .account .who-mini { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .account .avatar, .account .avatar.photo { width: 32px; height: 32px; }
+    .online-chip { padding: 4px 9px; font-size: 12px; }
+    .online-word { display: none; }
+    h1 { font-size: 26px; }
+    .lead { font-size: 14.5px; }
+    .update { margin: -6px 0 16px; justify-content: space-between; }
     .side { width: 100%; }
     .wrap { padding: 20px 16px 48px; }
     .filter-row { display: block; }
@@ -327,8 +346,8 @@
   <section id="panel-people" role="tabpanel" aria-labelledby="tab-people">
     <div class="toolbar">
       <input type="search" class="search" id="q" data-i18n-ph="search">
-      <button type="button" class="btn btn-ghost filter-toggle" id="f-toggle" aria-expanded="true" aria-controls="filters">
-        <span data-i18n="filters"></span><span class="count" id="f-count" hidden></span><span class="chev" aria-hidden="true">▾</span>
+      <button type="button" class="btn btn-ghost filter-toggle" id="f-toggle" aria-expanded="false" aria-controls="filters">
+        <span data-i18n="filters"></span><span class="count" id="f-count" hidden></span><span class="chev" aria-hidden="true">▾</span><span class="fswitch" aria-hidden="true"><i></i></span>
       </button>
       <button type="button" class="chip chip-now" id="f-now" aria-pressed="false"><span class="dot" aria-hidden="true"></span><span id="f-now-label"></span></button>
       <button type="button" class="btn-text" id="f-reset" hidden data-i18n="resetFilters"></button>
@@ -495,7 +514,7 @@ const STR = {
     localTimeHint: (c) => `Data e ora nel tuo fuso (${c}).`,
     doneLabel: (n) => n === 1 ? 'sessione' : 'sessioni', doneTitle2: (n) => `${n} ${n === 1 ? 'sessione di pratica fatta' : 'sessioni di pratica fatte'}`,
     remindersOff: 'Fatto: non riceverai più i promemoria sulle sessioni concluse.',
-    online: (n) => `${n} ${n === 1 ? 'connesso' : 'connessi'}`, onlineNow: 'Online adesso', onlineYou: 'tu',
+    online: (n) => `${n} ${n === 1 ? 'connesso' : 'connessi'}`, onlineWord: (n) => n === 1 ? 'connesso' : 'connessi', onlineNow: 'Online adesso', onlineYou: 'tu',
     busySending: 'Invio…', busySaving: 'Salvo…', busyConfirming: 'Confermo…', busyCancelling: 'Annullo…',
     busyStep1: 'Salvo la proposta…', busyStep2: 'Avviso i partecipanti via email…', busyStep3: 'Quasi fatto, ancora un istante…',
     busyMeet: 'Creo l\'evento e il link Google Meet…',
@@ -601,7 +620,7 @@ const STR = {
     localTimeHint: (c) => `Date and time in your time zone (${c}).`,
     doneLabel: (n) => n === 1 ? 'session' : 'sessions', doneTitle2: (n) => `${n} practice ${n === 1 ? 'session' : 'sessions'} done`,
     remindersOff: 'Done: you will no longer get reminders about finished sessions.',
-    online: (n) => `${n} online`, onlineNow: 'Online now', onlineYou: 'you',
+    online: (n) => `${n} online`, onlineWord: () => 'online', onlineNow: 'Online now', onlineYou: 'you',
     busySending: 'Sending…', busySaving: 'Saving…', busyConfirming: 'Confirming…', busyCancelling: 'Cancelling…',
     busyStep1: 'Saving the proposal…', busyStep2: 'Emailing the participants…', busyStep3: 'Almost done, one moment…',
     busyMeet: 'Creating the event and the Google Meet link…',
@@ -858,10 +877,11 @@ function buildFilters() {
 }
 
 /* Show / hide the filter panel; open by default on desktop, closed on phones; the choice is remembered */
+const isPhone = () => window.matchMedia('(max-width: 600px)').matches;
 function setFiltersOpen(open) {
   $('filters').hidden = !open;
   $('f-toggle').setAttribute('aria-expanded', String(open));
-  try { localStorage.setItem('se-filters', open ? '1' : '0'); } catch (e) {}
+  if (!isPhone()) try { localStorage.setItem('se-filters', open ? '1' : '0'); } catch (e) {}
 }
 function updateFilterUI() {
   const n = ['format', 'day', 'slot'].filter(k => state[k]).length;
@@ -892,11 +912,11 @@ function renderMe() {
   const t = T(), p = meP();
   const n = (state.online || []).length;
   const chip = state.me && n ? `<button type="button" class="online-chip" id="online-chip" aria-expanded="false">
-      <span class="online-dot" aria-hidden="true"></span>${esc(t.online(n))}</button>` : '';
-  $('account').innerHTML = chip + (state.me
+      <span class="online-dot" aria-hidden="true"></span><b>${n}</b><span class="online-word">&nbsp;${esc(t.onlineWord(n))}</span></button>` : '';
+  $('account').innerHTML = (state.me
     ? `<span class="who-mini">${p && p.photo ? `<img class="avatar photo" src="${esc(p.photo)}" alt="">`
         : `<span class="avatar" style="background:${tone(state.me)}" aria-hidden="true">${esc(initials(state.me))}</span>`}${esc(t.hello(first(state.me)))}</span>
-       <button type="button" class="btn-text" id="sign-out">${esc(t.signOut)}</button>`
+       ${chip}<button type="button" class="btn-text" id="sign-out">${esc(t.signOut)}</button>`
     : `<button type="button" class="btn" id="sign-in">${esc(t.signIn)}</button>`);
   $('legend').hidden = !meP();
   const url = state.formUrl;
@@ -1264,7 +1284,7 @@ $('f-reset').onclick = () => {
 };
 (() => {
   var saved = null; try { saved = localStorage.getItem('se-filters'); } catch (e) {}
-  setFiltersOpen(saved === null ? window.matchMedia('(min-width: 960px)').matches : saved === '1');
+  setFiltersOpen(isPhone() ? false : saved === null ? window.matchMedia('(min-width: 960px)').matches : saved === '1');
 })();
 $('tab-people').onclick = () => selectTab('people');
 $('tab-sessions').onclick = () => selectTab('sessions');
