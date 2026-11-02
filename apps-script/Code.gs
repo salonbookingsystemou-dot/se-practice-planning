@@ -106,7 +106,9 @@ function getData(k) {
   const viewer = k ? personByKey_(k) : null;
   const now = viewer ? readNow_() : {};
   const zones = readZones_();
+  const done = sessionsDone_();
   people.forEach(function (p) {
+    p.done = done[key_(p.name)] || 0;
     if (now[p.name]) p.freeUntil = now[p.name];
     if (zones[p.name] && zones[p.name] !== CONFIG.TIMEZONE) p.tz = zones[p.name];
   });
@@ -217,6 +219,21 @@ function readBookings_() {
     out.push(b);
   });
   return out.sort(function (a, b) { return (a.date + a.time).localeCompare(b.date + b.time); });
+}
+
+/* How many confirmed sessions each person has completed (ended), by lower-case name */
+function sessionsDone_() {
+  if (MEMO_.done) return MEMO_.done;
+  const out = {};
+  const t = Date.now();
+  bookingsSheet_().getDataRange().getValues().slice(1).forEach(function (r) {
+    if (String(r[8]) !== 'confirmed') return;
+    const st = startOf_({ date: asDate_(r[4]), time: asTime_(r[5]) });
+    if (!st || st.getTime() + CONFIG.SESSION_MINUTES * 60000 > t) return;
+    [r[2], r[3], r[9]].forEach(function (n) { if (n) out[key_(n)] = (out[key_(n)] || 0) + 1; });
+  });
+  MEMO_.done = out;
+  return out;
 }
 
 /* The moment a session starts (stored as Italian date and time) */

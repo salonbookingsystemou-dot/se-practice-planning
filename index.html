@@ -111,6 +111,12 @@
   .who { display: flex; gap: 12px; align-items: center; }
   .avatar { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font: 700 15px var(--serif); color: var(--accent); flex-shrink: 0; }
   .avatar.photo { width: 56px; height: 56px; object-fit: cover; background: var(--surface-2); }
+  .who-text { flex: 1; min-width: 0; }
+  .done { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 60px;
+          padding: 6px 10px; border-radius: 14px; background: var(--accent); color: #fff; line-height: 1; }
+  .done-n { font: 700 24px var(--serif); }
+  .done-l { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; margin-top: 4px; opacity: .9; }
+  .done.zero { background: var(--surface-2); color: var(--muted); }
   .who h3 { font: 600 18px/1.25 var(--serif); margin: 0; }
   .who p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
   .badges { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -453,6 +459,7 @@ const STR = {
     inItaly: (t) => `${t} in Italia`, italyTime: 'ora italiana', yourTime: (t) => `da te alle ${t}`,
     tzBadge: (c, h) => `🌍 ${c} · ${h} rispetto all'Italia`, slotsLocal: (n) => `Le fasce di ${n} sono nella sua ora locale.`,
     localTimeHint: (c) => `Data e ora nel tuo fuso (${c}).`,
+    doneLabel: (n) => n === 1 ? 'sessione' : 'sessioni', doneTitle2: (n) => `${n} ${n === 1 ? 'sessione di pratica fatta' : 'sessioni di pratica fatte'}`,
     remindersOff: 'Fatto: non riceverai più i promemoria sulle sessioni concluse.',
     online: (n) => `${n} ${n === 1 ? 'connesso' : 'connessi'}`, onlineNow: 'Online adesso', onlineYou: 'tu',
     busySending: 'Invio…', busySaving: 'Salvo…', busyConfirming: 'Confermo…', busyCancelling: 'Annullo…',
@@ -552,6 +559,7 @@ const STR = {
     inItaly: (t) => `${t} in Italy`, italyTime: 'Italian time', yourTime: (t) => `${t} your time`,
     tzBadge: (c, h) => `🌍 ${c} · ${h} vs Italy`, slotsLocal: (n) => `${n}'s time slots are in their local time.`,
     localTimeHint: (c) => `Date and time in your time zone (${c}).`,
+    doneLabel: (n) => n === 1 ? 'session' : 'sessions', doneTitle2: (n) => `${n} practice ${n === 1 ? 'session' : 'sessions'} done`,
     remindersOff: 'Done: you will no longer get reminders about finished sessions.',
     online: (n) => `${n} online`, onlineNow: 'Online now', onlineYou: 'you',
     busySending: 'Sending…', busySaving: 'Saving…', busyConfirming: 'Confirming…', busyCancelling: 'Cancelling…',
@@ -911,7 +919,10 @@ function renderPeople() {
           const wrapped = `<span class="av-wrap">${av}${dot}</span>`;
           return isMe ? `<button type="button" class="avatar-btn" data-photo="1" aria-label="${esc(t.phTitle)}">${wrapped}</button>` : wrapped;
         })()}
-        <div><h3>${esc(p.name)}${isMe ? ` <span class="badge">${esc(t.you)}</span>` : ''}${isMe && !p.photo ? ` <button type="button" class="add-photo" data-photo="1">${esc(t.addPhoto)}</button>` : ''}</h3><p>${esc(p.region || '—')}</p></div>
+        <div class="who-text"><h3>${esc(p.name)}${isMe ? ` <span class="badge">${esc(t.you)}</span>` : ''}${isMe && !p.photo ? ` <button type="button" class="add-photo" data-photo="1">${esc(t.addPhoto)}</button>` : ''}</h3><p>${esc(p.region || '—')}</p></div>
+        <div class="done ${p.done ? '' : 'zero'}" title="${esc(t.doneTitle2(p.done || 0))}" aria-label="${esc(t.doneTitle2(p.done || 0))}">
+          <span class="done-n">${p.done || 0}</span><span class="done-l">${esc(t.doneLabel(p.done || 0))}</span>
+        </div>
       </div>
       ${fu && !isMe ? `<div><span class="free-badge"><span class="dot" aria-hidden="true"></span>${esc(t.freeUntil(hhmm(fu)))}</span></div>` : ''}
       ${freeRow}
@@ -1454,8 +1465,8 @@ function demo(fn, ...args) {
     demo.db = {
       today: iso(0), formUrl: 'https://forms.gle/example', appUrl: 'https://se-practice.mnesti.it',
       people: [
-        { hasEmail: true, freeUntil: new Date(Date.now() + 75 * 60000).toISOString(), key: 'demoanna', name: 'Anna Rossi', region: 'Milano', format: 'Both', days: ['Monday','Wednesday','Saturday'], slots: ['Evening (18–22)'], frequency: 'Weekly', setup: 'Triad (practitioner, client, observer)', languages: ['Italian','English'], phone: '333 1234567', notes: 'Would like to practice orienting and resourcing.' },
-        { hasEmail: true, key: 'demoluca', name: 'Luca Bianchi', region: 'Roma', format: 'Online', days: ['Tuesday','Wednesday','Thursday'], slots: ['Lunchtime (12–14)','Evening (18–22)'], frequency: 'Every two weeks', setup: 'Dyad (2 people)', languages: ['Italian'], phone: '', notes: '' },
+        { done: 4, hasEmail: true, freeUntil: new Date(Date.now() + 75 * 60000).toISOString(), key: 'demoanna', name: 'Anna Rossi', region: 'Milano', format: 'Both', days: ['Monday','Wednesday','Saturday'], slots: ['Evening (18–22)'], frequency: 'Weekly', setup: 'Triad (practitioner, client, observer)', languages: ['Italian','English'], phone: '333 1234567', notes: 'Would like to practice orienting and resourcing.' },
+        { done: 1, hasEmail: true, key: 'demoluca', name: 'Luca Bianchi', region: 'Roma', format: 'Online', days: ['Tuesday','Wednesday','Thursday'], slots: ['Lunchtime (12–14)','Evening (18–22)'], frequency: 'Every two weeks', setup: 'Dyad (2 people)', languages: ['Italian'], phone: '', notes: '' },
         { hasEmail: true, tz: 'America/New_York', key: 'demosara', name: 'Sara Conti', region: 'New York', format: 'Both', days: ['Wednesday','Saturday','Sunday'], slots: ['Morning (8–12)','Evening (18–22)'], frequency: 'Monthly', setup: 'No preference', languages: ['Italian'], phone: '', notes: '' },
       ],
       bookings: [{ id: 'demo1', by: 'Anna Rossi', with: 'Luca Bianchi', third: '', confirmedBy: [], date: iso(3), time: '19:00', format: 'Online', note: 'Zoom', status: 'proposed' }],
