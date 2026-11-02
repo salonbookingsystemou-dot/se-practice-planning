@@ -63,13 +63,20 @@ Nel foglio «Bookings» le colonne *Third* e *Confirmed by* si aggiungono da sol
 - Una sessione **confermata** resta visibile fino alla fine dell'incontro (inizio + `SESSION_MINUTES`), poi esce dall'app.
 - Non si possono proporre sessioni con data e ora già passate.
 
+## Promemoria 2 ore prima (sessioni confermate)
+Circa 2 ore prima (`SOON_HOURS`) di una sessione confermata, tutti i partecipanti ricevono «Tra circa 2 ore: sessione di
+pratica con …», con il pulsante **Entra su Google Meet** (o «Apri l'app» se in presenza), l'ora locale per chi è all'estero e la nota.
+Per le sessioni prima delle 9:00 il promemoria arriva **la sera prima** (dopo le 20), mai di notte. Una volta sola (colonna *Soon*).
+
+Il controllo automatico gira **ogni 15 minuti** (le installazioni precedenti, che giravano ogni ora, si aggiornano da sole).
+
 ## Reminder 24 ore prima
 Se mancano 24 ore (`REMIND_HOURS`) a una sessione non ancora confermata da tutti:
 - ogni invitato che non ha confermato riceve «Conferma la sessione di domani alle 19:00 con Dimitri: senza conferma
   verrà annullata», con il pulsante che apre l'app già riconosciuti (rispondendo si scrive a chi ha proposto);
 - chi ha proposto riceve l'avviso di chi manca all'appello.
 Una volta sola per sessione (colonna *Reminded* in «Bookings»), tra le 8 e le 22, mai nelle prime 3 ore dalla proposta.
-Gira nello stesso controllo orario del promemoria qui sotto (`installTriggers`). Per spegnere: `REMIND_HOURS: 0`.
+Gira nello stesso controllo automatico del promemoria qui sotto (`installTriggers`). Per spegnere: `REMIND_HOURS: 0`.
 
 ## Promemoria «hanno appena praticato»
 Quando una sessione **confermata** finisce, tutti gli altri iscritti ricevono un'email: «Dimitri e Branham hanno appena

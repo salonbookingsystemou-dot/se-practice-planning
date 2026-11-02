@@ -19,6 +19,7 @@ const CONFIG = {
   SEND_EMAILS: true,          // email notifications for proposals, confirmations and cancellations
   CREATE_MEET: true,          // when everyone has confirmed: calendar event + Google Meet link (needs the Calendar service, see ISTRUZIONI)
   SESSION_MINUTES: 90,        // length of a session (calendar event, "still visible" window, digest timing)
+  SOON_HOURS: 2,              // reminder to everyone, this many hours before a CONFIRMED session (0 = off)
   REMIND_HOURS: 24,           // reminder to confirm, this many hours before an unconfirmed session (0 = off)
   DIGEST: true,               // after confirmed sessions end: "X and Y just practised, what about you?" to everyone else
   DIGEST_EVERY_HOURS: 20,     // at most one such email per person per day
@@ -28,7 +29,7 @@ const CONFIG = {
   SENDER_NAME: 'SE Practice Partners',
 };
 
-const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by', 'Meet', 'Event', 'Shared', 'Reminded'];
+const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by', 'Meet', 'Event', 'Shared', 'Reminded', 'Soon'];
 
 /* ---------- JSON API used by the page on GitHub Pages ----------
    GET  …/exec?fn=getData                      → data
@@ -855,11 +856,26 @@ const DIGEST_MAIL = {
   },
 };
 
-function digestNow() {   // hourly trigger: reminders first, then the digest
+const TRIGGER_VERSION = '2';   // 2 = every 15 minutes (needed for the "in 2 hours" reminder)
+
+function digestNow() {   // periodic trigger: reminders, then the digest
   MEMO_ = {};
+  upgradeTriggers_();
+  const soon = remindSoon_();
   const reminders = remindPending_();
   const digest = runDigest_();
-  return 'reminders: ' + reminders + ' · digest: ' + digest;
+  return 'soon: ' + soon + ' · reminders: ' + reminders + ' · digest: ' + digest;
+}
+
+/* Older installs ran this hourly: switch to every 15 minutes by itself, once */
+function upgradeTriggers_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('TRIGGER_VERSION') === TRIGGER_VERSION) return;
+  try {
+    ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'digestNow') ScriptApp.deleteTrigger(t); });
+    ScriptApp.newTrigger('digestNow').timeBased().everyMinutes(15).create();
+    props.setProperty('TRIGGER_VERSION', TRIGGER_VERSION);
+  } catch (e) { console.error('Trigger upgrade failed: ' + e); }
 }
 
 function runDigest_() {
@@ -971,8 +987,9 @@ function remindPending_() {
   const sheet = bookingsSheet_();
   const values = sheet.getDataRange().getValues();
   const t = Date.now();
-  const people = readPeople_(), langs = readLangs_(), zones = readZones_();
-  const find = function (n) { return people.find(function (p) { return key_(p.name) === key_(n); }) || { name: n }; };
+  var people, langs, zones;
+  const load = function () { if (!people) { people = readPeople_(); langs = readLangs_(); zones = readZones_(); } };
+  const find = function (n) { load(); return people.find(function (p) { return key_(p.name) === key_(n); }) || { name: n }; };
   const first = function (n) { return String(n).split(/\s+/)[0]; };
   const todayRome = today_();
   var sent = 0;
@@ -989,6 +1006,7 @@ function remindPending_() {
     const pending = invitees_(b).filter(function (n) { return b.confirmedBy.indexOf(n) === -1; });
     if (!pending.length) return;
 
+    load();
     const send = function (name, isProposer) {
       const p = find(name);
       const lang = MAIL[langs[name]] ? langs[name] : 'it';
@@ -1025,6 +1043,84 @@ function remindPending_() {
     pending.forEach(function (n) { send(n, false); });
     send(b.by, true);
     sheet.getRange(i + 2, 15).setValue(new Date());
+  });
+  return sent + ' emails';
+}
+
+/* ---------- "In 2 hours" reminder for confirmed sessions ----------
+   To every participant. Early sessions (before 9:00) get it the evening before, around 21:00, not at dawn. */
+
+const SOON_MAIL = {
+  it: {
+    subject: function (v) { return (v.evening ? 'Domani' : 'Tra poco') + ': sessione di pratica SE alle ' + v.time + ' con ' + v.others; },
+    lead: function (v) { return (v.evening ? 'Promemoria per domani: ' : 'Tra circa ' + v.hours + ' ore: ') + 'sessione di pratica con ' + v.others + '.'; },
+    action: 'Buona pratica! Se non potete più, avvisatevi e annullatela dall\'app.',
+    meetButton: 'Entra su Google Meet', appButton: 'Apri l\'app',
+  },
+  en: {
+    subject: function (v) { return (v.evening ? 'Tomorrow' : 'Soon') + ': SE practice session at ' + v.time + ' with ' + v.others; },
+    lead: function (v) { return (v.evening ? 'Reminder for tomorrow: ' : 'In about ' + v.hours + ' hours: ') + 'practice session with ' + v.others + '.'; },
+    action: 'Enjoy the practice! If you can no longer make it, let each other know and cancel it in the app.',
+    meetButton: 'Join on Google Meet', appButton: 'Open the app',
+  },
+};
+
+function remindSoon_() {
+  if (!CONFIG.SOON_HOURS || !CONFIG.SEND_EMAILS) return 'off';
+  const nowHour = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H'));
+  if (nowHour < 7 || nowHour >= 22) return 'quiet hours';
+  const sheet = bookingsSheet_();
+  const values = sheet.getDataRange().getValues();
+  const t = Date.now();
+  var people, langs, zones;
+  const load = function () { if (!people) { people = readPeople_(); langs = readLangs_(); zones = readZones_(); } };
+  const find = function (n) { load(); return people.find(function (p) { return key_(p.name) === key_(n); }) || { name: n }; };
+  const first = function (n) { return String(n).split(/\s+/)[0]; };
+  var sent = 0;
+
+  values.slice(1).forEach(function (r, i) {
+    if (String(r[8]) !== 'confirmed' || r[15]) return;
+    const b = { id: String(r[0]), by: String(r[2]), with: String(r[3]), date: asDate_(r[4]), time: asTime_(r[5]),
+      format: String(r[6]), note: String(r[7]), third: String(r[9] || ''), meet: String(r[11] || '') };
+    const start = startOf_(b);
+    if (!start || start.getTime() <= t) return;
+    const left = start.getTime() - t;
+    const startHour = Number(b.time.split(':')[0]);
+    const early = startHour < 9;
+    // normal: within SOON_HOURS · early mornings: the evening before (from 20:00, within 13 h)
+    const evening = early && nowHour >= 20 && left <= 13 * 3600000 && left > CONFIG.SOON_HOURS * 3600000;
+    if (!(left <= CONFIG.SOON_HOURS * 3600000 || evening)) return;
+
+    load();
+    participants_(b).forEach(function (name) {
+      const p = find(name);
+      const lang = MAIL[langs[name]] ? langs[name] : 'it';
+      const t1 = MAIL[lang], m = SOON_MAIL[lang];
+      const join = function (list) { return list.length < 2 ? list.join('') : list.slice(0, -1).join(', ') + ' ' + t1.labels.and + ' ' + list[list.length - 1]; };
+      const others = participants_(b).filter(function (n) { return n !== name; }).map(first);
+      const v = { others: join(others), time: timeLabel_(b.time, t1.locale), evening: evening, hours: Math.max(1, Math.round(left / 3600000)) };
+      const d = dateLabel_(b.date, t1.locale);
+      const rows = [[t1.labels.when, d.long + ' ' + t1.labels.at + ' ' + timeLabel_(b.time, t1.locale)]];
+      const tz = zones[name];
+      if (tz && tz !== CONFIG.TIMEZONE) {
+        const loc = inZone_(b.date, b.time, tz), ld = dateLabel_(loc.date, t1.locale);
+        rows[0][1] += ' · ' + t1.labels.italy;
+        rows.push([t1.labels.local, ld.long + ' ' + t1.labels.at + ' ' + timeLabel_(loc.time, t1.locale) + ' · ' + tz.split('/').pop().replace(/_/g, ' ')]);
+      }
+      rows.push([t1.labels.format, t1.formats[b.format] || b.format], [t1.labels.who, join(participants_(b))]);
+      if (b.meet) rows.push([t1.labels.meet, b.meet]);
+      if (b.note) rows.push([t1.labels.note, b.note]);
+      const url = b.meet || personalUrl_(name);
+      const table = '<table style="border-collapse:collapse;width:100%;font-size:15px;margin-bottom:20px">' +
+        rows.map(function (x) {
+          return '<tr><td style="padding:8px 0;border-top:1px solid #EFE8EC;color:#6E686B;width:110px;vertical-align:top">' + esc_(x[0]) +
+            '</td><td style="padding:8px 0;border-top:1px solid #EFE8EC">' + esc_(x[1]) + '</td></tr>';
+        }).join('') + '</table><p style="margin:0 0 18px;font-size:15px">' + esc_(m.action) + '</p>';
+      const html = mailFrame_(m.lead(v), table, url, b.meet ? m.meetButton : m.appButton, t1.footer);
+      const text = [m.lead(v), ''].concat(rows.map(function (x) { return x[0] + ': ' + x[1]; }), ['', m.action, url, '', '—', t1.footer]).join('\n');
+      try { if (sendLogged_('soon', p.name, p.email, m.subject(v), text, replyOpts_(html, ''), b.id)) sent++; } catch (e) { /* logged */ }
+    });
+    sheet.getRange(i + 2, 16).setValue(new Date());
   });
   return sent + ' emails';
 }
@@ -1066,7 +1162,8 @@ function installTriggers() {
     if (['backupNow', 'digestNow'].indexOf(t.getHandlerFunction()) !== -1) ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('backupNow').timeBased().everyDays(1).atHour(3).inTimezone(CONFIG.TIMEZONE).create();
-  ScriptApp.newTrigger('digestNow').timeBased().everyHours(1).create();
+  ScriptApp.newTrigger('digestNow').timeBased().everyMinutes(15).create();
+  PropertiesService.getScriptProperties().setProperty('TRIGGER_VERSION', TRIGGER_VERSION);
   return backupNow();
 }
 function installBackup() { return installTriggers(); }   // older name, same thing
