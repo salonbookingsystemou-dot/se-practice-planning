@@ -117,7 +117,7 @@ della pagina (o dopo 2,5 minuti) e sta solo nella memoria temporanea del motore:
 
 ## Google Meet alla conferma
 Quando **tutti** gli invitati hanno confermato, lo script crea nel tuo Google Calendar un evento (durata `SESSION_MINUTES`,
-90 minuti) con i partecipanti come invitati e, per le sessioni online, un **link Google Meet**. Poi manda a tutti
+1 ora) con i partecipanti come invitati e, per le sessioni online, un **link Google Meet**. Poi manda a tutti
 un'email «Sessione confermata» con il pulsante «Entra su Google Meet». Se la sessione viene annullata, l'evento si cancella.
 Google Calendar manda anche il suo invito a ogni partecipante: l'evento con il Meet compare nel loro calendario,
 con le loro notifiche abituali. Il link Meet non compare nella pagina.

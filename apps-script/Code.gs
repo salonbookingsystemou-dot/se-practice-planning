@@ -22,7 +22,7 @@ const CONFIG = {
   MIN_GAP_MINUTES: 90,        // a person can't have two sessions closer than this
   SEND_EMAILS: true,          // email notifications for proposals, confirmations and cancellations
   CREATE_MEET: true,          // when everyone has confirmed: calendar event + Google Meet link (needs the Calendar service, see ISTRUZIONI)
-  SESSION_MINUTES: 90,        // length of a session (calendar event, "still visible" window, digest timing)
+  SESSION_MINUTES: 60,        // length of a session (calendar event, "still visible" window, digest timing)
   SOON_HOURS: 2,
   START_MINUTES: 15,          // "starting soon" email with the Meet link, about this many minutes before (0 = off)              // reminder to everyone, this many hours before a CONFIRMED session (0 = off)
   REMIND_HOURS: 24,           // reminder to confirm, this many hours before an unconfirmed session (0 = off)
