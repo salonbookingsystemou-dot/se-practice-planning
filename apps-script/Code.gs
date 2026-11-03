@@ -1135,12 +1135,46 @@ function digestNow() {   // periodic trigger: reminders, then the digest
   upgradeTriggers_();
   const starting = remindStarting_();
   const soon = remindSoon_();
+  const promoted = promoteTriads_();
   const reminders = remindPending_();
   const digest = runDigest_();
-  const result = 'starting: ' + starting + ' · soon: ' + soon + ' · reminders: ' + reminders + ' · digest: ' + digest;
+  const result = 'promoted: ' + promoted + ' · starting: ' + starting + ' · soon: ' + soon + ' · reminders: ' + reminders + ' · digest: ' + digest;
   const props = PropertiesService.getScriptProperties();
   props.setProperty('LAST_RUN', new Date().toISOString()); props.setProperty('LAST_RUN_RESULT', result);
   return result;
+}
+
+/* Triads proposed before the "two of three" rule: if the proposer and one invitee already agree and the session is
+   still ahead, it is confirmed now — calendar event with Meet and the usual confirmation email to all three. */
+function promoteTriads_() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return 'busy';
+  var n = 0;
+  try {
+    const sheet = bookingsSheet_();
+    const values = sheet.getDataRange().getValues();
+    for (var i = 1; i < values.length; i++) {
+      const r = values[i];
+      if (String(r[8] || 'proposed') !== 'proposed' || !r[9]) continue;
+      const b = { id: String(r[0]), by: String(r[2]), with: String(r[3]), date: asDate_(r[4]), time: asTime_(r[5]),
+        format: String(r[6]), note: String(r[7]), third: String(r[9] || ''), confirmedBy: splitNames_(r[10]),
+        meet: String(r[11] || ''), eventId: String(r[12] || ''), status: 'confirmed' };
+      if (!b.confirmedBy.length) continue;
+      const start = startOf_(b);
+      if (!start || start.getTime() <= Date.now()) continue;
+      b.allConfirmed = invitees_(b).every(function (x) { return b.confirmedBy.indexOf(x) !== -1; });
+      sheet.getRange(i + 1, 9).setValue('confirmed');
+      const people = readPeople_(), langs = readLangs_();
+      const lang = MAIL[langs[b.by]] ? langs[b.by] : 'it';
+      if (!b.eventId) {
+        const ev = createEvent_(b, people, lang);
+        if (ev.eventId) { sheet.getRange(i + 1, 12, 1, 2).setValues([[ev.meet || '', ev.eventId]]); b.meet = ev.meet || ''; b.eventId = ev.eventId; }
+      }
+      notify_('scheduled', b, people, lang, b.confirmedBy[b.confirmedBy.length - 1], true);
+      n++;
+    }
+  } finally { lock.releaseLock(); }
+  return n;
 }
 
 /* The reminders need the 15-minute trigger. If it is missing (installTriggers never run), any visit to the app installs it.
