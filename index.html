@@ -516,7 +516,7 @@ const STR = {
     available: 'disponibile',
     noSessions: 'Nessuna sessione in programma. Scegli qualcuno in Persone e proponine una.',
     withWord: 'con', confirmed: 'Confermata', proposed: 'Proposta',
-    confirm: 'Conferma', decline: 'Rifiuta', declineAsk: 'Rifiutare l\'invito? La sessione verrà annullata per tutti.', declinedToast: 'Invito rifiutato.',
+    confirm: 'Conferma', decline: 'Rifiuta', declineAsk: 'Rifiutare l\'invito? La sessione verrà annullata per tutti.', declineKeepAsk: 'Rifiutare l\'invito? La sessione resta in programma per gli altri due.', notYet: (n) => `${n} non ha ancora risposto`, youCanJoin: 'puoi ancora unirti', declinedToast: 'Invito rifiutato.',
     emailedDecline: (n) => `Invito rifiutato. Abbiamo avvisato ${n} via email.`, remindWa: 'Ricorda su WhatsApp', cancelSession: 'Annulla',
     dlgTitle: 'Proponi una sessione', yourName: 'Il tuo nome', with: 'Con', date: 'Data', time: 'Ora',
     third: 'Terzo partecipante (facoltativo, per una triade)', nobody: 'Nessuno · sessione a due',
@@ -629,7 +629,7 @@ const STR = {
     available: 'available',
     noSessions: 'No sessions planned yet. Pick someone in People and propose one.',
     withWord: 'with', confirmed: 'Confirmed', proposed: 'Proposed',
-    confirm: 'Confirm', decline: 'Decline', declineAsk: 'Decline the invitation? The session will be cancelled for everyone.', declinedToast: 'Invitation declined.',
+    confirm: 'Confirm', decline: 'Decline', declineAsk: 'Decline the invitation? The session will be cancelled for everyone.', declineKeepAsk: 'Decline the invitation? The session stays on for the other two.', notYet: (n) => `${n} has not answered yet`, youCanJoin: 'you can still join', declinedToast: 'Invitation declined.',
     emailedDecline: (n) => `Invitation declined. We emailed ${n}.`, remindWa: 'Remind on WhatsApp', cancelSession: 'Cancel',
     dlgTitle: 'Propose a session', yourName: 'Your name', with: 'With', date: 'Date', time: 'Time',
     third: 'Third person (optional, for a triad)', nobody: 'Nobody · session for two',
@@ -1056,20 +1056,22 @@ function renderSessions() {
       const inv = invitees(b);
       const done = b.confirmedBy || [];
       const mine = me && participants(b).some(n => key(n) === me);
-      const canConfirm = me && b.status === 'proposed' && inv.some(n => key(n) === me) && !done.some(n => key(n) === me);
-      const reminders = me && key(b.by) === me && b.status === 'proposed'
+      // in a triad the session is on with two people: whoever has not answered can still join (or decline without cancelling it)
+      const canConfirm = me && (b.status === 'proposed' || b.status === 'confirmed') && inv.some(n => key(n) === me) && !done.some(n => key(n) === me);
+      const pendingNames = inv.filter(n => !done.some(x => key(x) === key(n)));
+      const reminders = me && key(b.by) === me && (b.status === 'proposed' || b.status === 'confirmed')
         ? inv.filter(n => !done.includes(n)).map(n => [n, waInvite(b, n)]).filter(x => x[1]) : [];
       const statusLabel = b.status === 'confirmed' ? t.confirmed : done.length ? t.partial(done.length, inv.length) : t.proposed;
       const statusClass = b.status === 'confirmed' ? 'confirmed' : done.length ? 'partial' : 'proposed';
       return `<div class="session">
         <span class="time">${esc(localOf(b).time)}<br><span class="local-note">${esc(partOfDay(localOf(b).time))}</span>${iAmAbroad() ? `<br><span class="local-note">${esc(t.inItaly(timeLabel(b.time)))}</span>` : ''}</span>
         <div class="pair"><strong>${esc(b.by)}</strong> ${esc(t.withWord)} ${inv.map(n => `<strong>${esc(n)}</strong>`).join(' ' + esc(t.and) + ' ')}
-          <div class="meta">${esc(tv(b.format))}${b.note ? ' · ' + esc(b.note) : ''}${b.status === 'confirmed' && mine && b.format !== 'In person' ? ' · ' + esc(t.meetByEmail) : ''}</div></div>
+          <div class="meta">${esc(tv(b.format))}${b.note ? ' · ' + esc(b.note) : ''}${b.status === 'confirmed' && mine && b.format !== 'In person' ? ' · ' + esc(t.meetByEmail) : ''}${b.status === 'confirmed' && pendingNames.length ? ' · ' + esc(canConfirm ? t.youCanJoin : t.notYet(joinNames(pendingNames.map(first)))) : ''}</div></div>
         <span class="status ${statusClass}">${esc(statusLabel)}</span>
         ${mine ? `<div class="actions">
           ${canConfirm ? `<button class="btn btn-small" data-confirm="${esc(b.id)}">${esc(t.confirm)}</button>` : ''}
           ${reminders.map(([n, wa]) => `<a class="btn btn-ghost btn-small btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${esc(inv.length > 1 ? t.waTo(first(n)) : t.remindWa)}</a>`).join('')}
-          <button class="btn btn-ghost btn-small btn-danger" data-cancel="${esc(b.id)}" ${canConfirm ? 'data-decline="1"' : ''}>${esc(canConfirm ? t.decline : t.cancelSession)}</button></div>` : ''}
+          <button class="btn btn-ghost btn-small btn-danger" data-cancel="${esc(b.id)}" ${canConfirm ? `data-decline="${inv.length > 1 ? 'keep' : '1'}"` : ''}>${esc(canConfirm ? t.decline : t.cancelSession)}</button></div>` : ''}
       </div>`;
     }).join('') + '</div>';
   }).join('');
@@ -1634,7 +1636,7 @@ document.addEventListener('click', async (e) => {
   const t = T();
   if (!myKey()) return openLogin(t.needLogin);
   const declining = !!el.dataset.decline;
-  if (el.dataset.cancel && !confirm(declining ? t.declineAsk : t.cancelAsk)) return;
+  if (el.dataset.cancel && !confirm(el.dataset.decline === 'keep' ? t.declineKeepAsk : declining ? t.declineAsk : t.cancelAsk)) return;
   const row = el.closest('.session');
   if (row) row.querySelectorAll('.actions .btn').forEach(b => { if (b !== el) b.disabled = true; });
   const done = busy(el, el.dataset.confirm ? t.busyConfirming : t.busyCancelling);
@@ -1770,11 +1772,10 @@ function demo(fn, ...args) {
   if (fn === 'confirmBooking') {
     const b = db.bookings.find(x => x.id === args[0]);
     const who = actor(args[1]);
+    const wasOn = b.status === 'confirmed';
     if (!b.confirmedBy.includes(who)) b.confirmedBy.push(who);
-    if ([b.with, b.third].filter(Boolean).every(n => b.confirmedBy.includes(n))) {
-      b.status = 'confirmed';
-      return { ...JSON.parse(JSON.stringify(db)), scheduled: true, meet: b.format !== 'In person' };
-    }
+    b.status = 'confirmed';
+    if (!wasOn) return { ...JSON.parse(JSON.stringify(db)), scheduled: true, meet: b.format !== 'In person' };
   }
   if (fn === 'cancelBooking') db.bookings = db.bookings.filter(b => b.id !== args[0]);
   db.bookings.sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));

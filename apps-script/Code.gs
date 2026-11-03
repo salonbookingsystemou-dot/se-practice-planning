@@ -236,7 +236,8 @@ function sessionsDone_() {
     if (String(r[8]) !== 'confirmed') return;
     const st = startOf_({ date: asDate_(r[4]), time: asTime_(r[5]) });
     if (!st || st.getTime() + CONFIG.SESSION_MINUTES * 60000 > t) return;
-    [r[2], r[3], r[9]].forEach(function (n) { if (n) out[key_(n)] = (out[key_(n)] || 0) + 1; });
+    present_({ by: String(r[2]), with: String(r[3]), third: String(r[9] || ''), confirmedBy: splitNames_(r[10]) })
+      .forEach(function (n) { out[key_(n)] = (out[key_(n)] || 0) + 1; });
   });
   MEMO_.done = out;
   return out;
@@ -251,6 +252,12 @@ function startOf_(b) {
 function all_(b) { return participants_(b); }
 function participants_(b) { return [b.by, b.with].concat(b.third ? [b.third] : []); }
 function invitees_(b) { return [b.with].concat(b.third ? [b.third] : []); }
+/* Who actually takes part: the proposer plus the invitees who confirmed (in a triad the session is on with two of three) */
+function present_(b) {
+  const ok = (b.confirmedBy || []).map(key_);
+  return [b.by].concat(invitees_(b).filter(function (n) { return ok.indexOf(key_(n)) !== -1; }));
+}
+const splitNames_ = function (v) { return String(v || '').split(',').map(function (x) { return x.trim(); }).filter(String); };
 
 /* ---------- Personal links ----------
    Each person has a secret key derived from their name and a random salt kept in the script properties.
@@ -592,13 +599,15 @@ function confirmBooking(id, k, lang) {
     const start = startOf_(b);
     if (b.status === 'expired' || (start && start.getTime() <= Date.now())) throw new Error('ERR_EXPIRED');
     if (b.confirmedBy.indexOf(who) !== -1) return { unchanged: true };   // double click / second tab: no new emails
+    const wasOn = b.status === 'confirmed';
     b.confirmedBy.push(who);
-    const all = invitees_(b).every(function (n) { return b.confirmedBy.indexOf(n) !== -1; });
+    b.allConfirmed = invitees_(b).every(function (n) { return b.confirmedBy.indexOf(n) !== -1; });
     sheet.getRange(row, 11).setValue(b.confirmedBy.join(', '));
-    sheet.getRange(row, 9).setValue(all ? 'confirmed' : 'proposed');
-    b.allConfirmed = all;
-    if (!all) return { event: 'confirmed', actor: who };
-    // Everyone is in: calendar event with a Meet link, then one email to all participants
+    // Proposer + one invitee are enough: in a triad the session is on as soon as the first invitee confirms
+    sheet.getRange(row, 9).setValue('confirmed');
+    b.status = 'confirmed';
+    if (wasOn) return { event: 'confirmed', actor: who };   // the third joins a session already on: no second Meet email
+    // The session is on: calendar event with a Meet link (all invited, also who has not answered yet), one email to everyone
     if (!b.eventId) {
       const ev = createEvent_(b, readPeople_(), lang);
       if (ev.eventId) { sheet.getRange(row, 12, 1, 2).setValues([[ev.meet || '', ev.eventId]]); b.meet = ev.meet || ''; b.eventId = ev.eventId; }
@@ -613,6 +622,17 @@ function cancelBooking(id, k, lang) {
     const who = participants_(b).find(function (n) { return key_(n) === key_(name); });
     if (!who) throw new Error('ERR_ONLY_PAIR');
     if (b.status === 'cancelled' || b.status === 'expired') return { unchanged: true };
+    const answered = key_(who) === key_(b.by) || b.confirmedBy.indexOf(who) !== -1;
+    if (b.third && !answered) {
+      // triad: whoever has not confirmed declines and leaves; the session goes on as a pair
+      const rest = invitees_(b).filter(function (n) { return n !== who; });
+      b.with = rest[0]; b.third = '';
+      sheet.getRange(row, 4).setValue(b.with);
+      sheet.getRange(row, 10).setValue('');
+      if (b.eventId) dropAttendee_(b.eventId, who);
+      b.left = who;
+      return { event: 'left', actor: who };
+    }
     sheet.getRange(row, 9).setValue('cancelled');
     if (b.eventId) removeEvent_(b.eventId);
     const declined = key_(who) !== key_(b.by) && b.confirmedBy.indexOf(who) === -1;   // invited and never accepted
@@ -889,6 +909,16 @@ function createEvent_(b, people, lang) {
   }
 }
 
+function dropAttendee_(eventId, name) {
+  if (typeof Calendar === 'undefined') return;
+  try {
+    const p = readPeople_().find(function (x) { return key_(x.name) === key_(name); }) || {};
+    const ev = Calendar.Events.get('primary', eventId);
+    const attendees = (ev.attendees || []).filter(function (a) { return !p.email || String(a.email).toLowerCase() !== String(p.email).toLowerCase(); });
+    Calendar.Events.patch({ attendees: attendees }, 'primary', eventId, { sendUpdates: 'all' });
+  } catch (e) { console.error('Calendar attendee not removed: ' + e); }
+}
+
 function removeEvent_(eventId) {
   if (typeof Calendar === 'undefined') return;
   try { Calendar.Events.remove('primary', eventId, { sendUpdates: 'all' }); }
@@ -914,11 +944,15 @@ const MAIL = {
       lead: function (v) { return v.actor + ' ha confermato la sessione di pratica' + (v.allConfirmed ? ': ora è confermata da tutti.' : '. Si attende ancora la conferma di ' + v.pending + '.'); },
       action: 'Buona pratica!', button: 'Apri l\'app' },
     scheduled: { subject: function (v) { return 'Sessione confermata · ' + v.whenShort + (v.meet ? ' · link Meet' : ''); },
-      lead: function (v) { return 'La sessione di pratica è confermata da tutti.' + (v.meet ? ' Ecco il link per collegarvi.' : ''); },
-      action: 'Buona pratica!', button: 'Entra su Google Meet', buttonNoMeet: 'Apri l\'app' },
+      lead: function (v) { return v.youPending ? v.inFirst + ' hanno confermato la sessione di pratica, che quindi si farà. Puoi unirti confermando dall\'app, oppure rifiutare.' + (v.meet ? ' Il link Meet è già nell\'invito del calendario.' : '') :
+        (v.pending ? 'La sessione di pratica è confermata: ci siete in due, ' + v.pending + ' può ancora unirsi confermando dall\'app.' : 'La sessione di pratica è confermata da tutti.') + (v.meet ? ' Ecco il link per collegarvi.' : ''); },
+      action: 'Buona pratica!', button: 'Entra su Google Meet', buttonNoMeet: 'Apri l\'app', buttonPending: 'Conferma o rifiuta' },
     declined: { subject: function (v) { return v.actorFirst + ' ha rifiutato l\'invito · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' ha rifiutato l\'invito a questa sessione di pratica, che quindi è annullata:'; },
       action: 'Se volete, potete proporne un\'altra in un altro orario dall\'app.', button: 'Apri l\'app' },
+    left: { subject: function (v) { return v.actorFirst + ' non parteciperà · ' + v.whenShort; },
+      lead: function (v) { return v.actor + ' non parteciperà a questa sessione di pratica, che ' + (v.on ? 'resta confermata:' : 'resta in programma per voi due:'); },
+      action: 'Buona pratica!', button: 'Apri l\'app' },
     cancelled: { subject: function (v) { return 'Sessione di pratica annullata · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' ha annullato questa sessione di pratica:'; },
       action: 'Se volete, potete proporne un\'altra dall\'app.', button: 'Apri l\'app' },
@@ -936,11 +970,15 @@ const MAIL = {
       lead: function (v) { return v.actor + ' confirmed the practice session' + (v.allConfirmed ? ': everyone has now confirmed.' : '. Still waiting for ' + v.pending + '.'); },
       action: 'Enjoy the practice!', button: 'Open the app' },
     scheduled: { subject: function (v) { return 'Session confirmed · ' + v.whenShort + (v.meet ? ' · Meet link' : ''); },
-      lead: function (v) { return 'The practice session is confirmed by everyone.' + (v.meet ? ' Here is the link to join.' : ''); },
-      action: 'Enjoy the practice!', button: 'Join on Google Meet', buttonNoMeet: 'Open the app' },
+      lead: function (v) { return v.youPending ? v.inFirst + ' confirmed the practice session, so it is on. You can join by confirming in the app, or decline.' + (v.meet ? ' The Meet link is already in the calendar invitation.' : '') :
+        (v.pending ? 'The practice session is confirmed: two of you are in, ' + v.pending + ' can still join by confirming in the app.' : 'The practice session is confirmed by everyone.') + (v.meet ? ' Here is the link to join.' : ''); },
+      action: 'Enjoy the practice!', button: 'Join on Google Meet', buttonNoMeet: 'Open the app', buttonPending: 'Confirm or decline' },
     declined: { subject: function (v) { return v.actorFirst + ' declined the invitation · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' declined the invitation to this practice session, so it is cancelled:'; },
       action: 'You can propose another time from the app.', button: 'Open the app' },
+    left: { subject: function (v) { return v.actorFirst + ' will not take part · ' + v.whenShort; },
+      lead: function (v) { return v.actor + ' will not take part in this practice session, which ' + (v.on ? 'stays confirmed:' : 'stays planned for the two of you:'); },
+      action: 'Enjoy the practice!', button: 'Open the app' },
     cancelled: { subject: function (v) { return 'Practice session cancelled · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' cancelled this practice session:'; },
       action: 'You can propose another one from the app.', button: 'Open the app' },
@@ -979,8 +1017,9 @@ function notify_(event, b, people, lang, actor, everyone) {
       if (!to.email) { logMail_(event, name, '', '', 'skipped: no email', b.id); return; }
       const others = event === 'proposed' ? all.filter(function (n) { return n !== actor && n !== name; }) : [];
       const pending = invitees_(b).filter(function (n) { return (b.confirmedBy || []).indexOf(n) === -1; });
-      const v = { actor: actor, actorFirst: first(actor), others: joinNames(others), allConfirmed: !!b.allConfirmed,
-                  pending: joinNames(pending), whenShort: d.short + ' ' + timeLabel_(b.time, t.locale), meet: b.meet || '' };
+      const youPending = pending.some(function (n) { return key_(n) === key_(name); });
+      const v = { actor: actor, actorFirst: first(actor), others: joinNames(others), allConfirmed: !!b.allConfirmed, youPending: youPending,
+                  inFirst: joinNames(present_(b).map(first)), on: b.status === 'confirmed', pending: joinNames(pending), whenShort: d.short + ' ' + timeLabel_(b.time, t.locale), meet: b.meet || '' };
       const rows = [[t.labels.when, d.long + ' ' + t.labels.at + ' ' + timeLabel_(b.time, t.locale) + (abroad ? ' · ' + t.labels.italy : '')]];
       const tz = zones[name];
       if (tz && tz !== CONFIG.TIMEZONE) {
@@ -993,8 +1032,9 @@ function notify_(event, b, people, lang, actor, everyone) {
       if (b.note) rows.push([t.labels.note, b.note]);
 
       const appLink = personalUrl_(to.name);   // opens the app with their name already chosen
-      const url = event === 'scheduled' && b.meet ? b.meet : appLink;
-      const button = event === 'scheduled' && !b.meet ? tpl.buttonNoMeet : tpl.button;
+      const meetFirst = event === 'scheduled' && b.meet && !youPending;   // who has not answered yet is sent to the app to confirm or decline
+      const url = meetFirst ? b.meet : appLink;
+      const button = youPending && tpl.buttonPending ? tpl.buttonPending : event === 'scheduled' && !b.meet ? tpl.buttonNoMeet : tpl.button;
       const text = [tpl.lead(v), ''].concat(rows.map(function (r) { return r[0] + ': ' + r[1]; }),
         ['', tpl.action, url].concat(url !== appLink ? [t.labels.app + ': ' + appLink] : [], ['', '—', t.footer])).join('\n');
       const table = '<table style="border-collapse:collapse;width:100%;font-size:15px;margin-bottom:20px">' +
@@ -1150,7 +1190,7 @@ function runDigest_() {
   const done = [];
   values.slice(1).forEach(function (r, i) {
     if (String(r[8]) !== 'confirmed' || r[13]) return;
-    const b = { by: String(r[2]), with: String(r[3]), third: String(r[9] || ''), date: asDate_(r[4]), time: asTime_(r[5]) };
+    const b = { by: String(r[2]), with: String(r[3]), third: String(r[9] || ''), date: asDate_(r[4]), time: asTime_(r[5]), confirmedBy: splitNames_(r[10]) };
     const start = startOf_(b);
     if (!start) return;
     const end = start.getTime() + CONFIG.SESSION_MINUTES * 60000;
@@ -1164,7 +1204,7 @@ function runDigest_() {
   const langs = readLangs_();
   const optOut = readOptOut_();
   const practised = {};
-  done.forEach(function (d) { participants_(d.b).forEach(function (n) { practised[key_(n)] = true; }); });
+  done.forEach(function (d) { present_(d.b).forEach(function (n) { practised[key_(n)] = true; }); });
   const first = function (n) { return String(n).split(/\s+/)[0]; };
   const app = appUrl_(), form = CONFIG.FORM_URL;
   var count = 0;
@@ -1175,7 +1215,7 @@ function runDigest_() {
     const lang = DIGEST_MAIL[langs[p.name]] ? langs[p.name] : 'it';
     const m = DIGEST_MAIL[lang];
     const join = function (list) { return list.length < 2 ? list.join('') : list.slice(0, -1).join(', ') + ' ' + m.and + ' ' + list[list.length - 1]; };
-    const groups = done.map(function (d) { return join(participants_(d.b).map(first)); }).join('; ');
+    const groups = done.map(function (d) { return join(present_(d.b).map(first)); }).join('; ');
     const url = personalUrl_(p.name);
     const stopUrl = url + '&reminders=off';
     const wa = 'https://wa.me/?text=' + encodeURIComponent(m.shareMsg(app, form));
