@@ -34,7 +34,7 @@ const CONFIG = {
   SENDER_NAME: 'SE Practice Partners',
 };
 
-const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by', 'Meet', 'Event', 'Shared', 'Reminded', 'Soon', 'Starting'];
+const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by', 'Meet', 'Event', 'Shared', 'Reminded', 'Soon', 'Starting', 'Observer allowed', 'Observer'];
 
 /* ---------- JSON API used by the page on GitHub Pages ----------
    GET  …/exec?fn=getData                      → data
@@ -44,7 +44,8 @@ const API = { getData: getData, createBooking: createBooking, confirmBooking: co
               whoAmI: whoAmI, signIn: signIn, requestLink: requestLink, uploadPhoto: uploadPhoto, getNow: getNow, setFreeNow: setFreeNow,
               setTimeZone: setTimeZone, setLanguage: setLanguage, leave: leave, setDigest: setDigest, status: status,
               getFeedback: getFeedback, addFeedback: addFeedback, deleteFeedback: deleteFeedback,
-              getResources: getResources, addResource: addResource, deleteResource: deleteResource };
+              getResources: getResources, addResource: addResource, deleteResource: deleteResource,
+              joinAsObserver: joinAsObserver, leaveObserver: leaveObserver };
 
 /* Health check without personal data: is the scheduler alive, are Gmail/Calendar usable, what happened to recent sessions */
 function status() {
@@ -213,6 +214,8 @@ function readBookings_() {
       status: String(r[8] || 'proposed'),
       third: String(r[9] || ''),
       confirmedBy: String(r[10] || '').split(',').map(function (x) { return x.trim(); }).filter(String),
+      observerOk: r[17] === true || String(r[17]).toLowerCase() === 'yes',
+      observer: String(r[18] || ''),
     };
     if (!b.id || b.status === 'cancelled' || b.status === 'expired') return;
     const start = startOf_(b);
@@ -569,6 +572,7 @@ function createBooking(input) {
     const booking = {
       id: Utilities.getUuid().slice(0, 8), by: by, with: withName, third: third, date: input.date, time: input.time,
       format: String(input.format || '').slice(0, 40), note: String(input.note || '').slice(0, 300),
+      observerOk: !third && !!input.observerOk,   // only a pair can open the session to an observer
     };
     const mine = participants_(booking);
     const start = minutes_(input.time);
@@ -579,7 +583,7 @@ function createBooking(input) {
     if (clash) throw new Error(['ERR_CLASH', clash.by, clash.with, clash.time].join('|'));
 
     bookingsSheet_().appendRow([booking.id, new Date(), booking.by, booking.with, "'" + booking.date, "'" + booking.time,
-      booking.format, booking.note, 'proposed', booking.third, '']);
+      booking.format, booking.note, 'proposed', booking.third, '', '', '', '', '', '', '', booking.observerOk ? 'yes' : '', '']);
     const data = sessionsData_(input.key);
     data.emailed = notify_('proposed', booking, people, input.lang, by);
     return data;
@@ -640,6 +644,48 @@ function cancelBooking(id, k, lang) {
   }, lang, k);
 }
 
+/* Observer: a pair can open a session to one observer. Anyone signed in (not in the session) joins with one click,
+   no approval needed: the pair is told by email and the observer is added to the calendar event (Meet link). */
+function joinAsObserver(id, k, lang) {
+  const name = actor_(k).name;
+  return withBooking_(id, function (b, row, sheet) {
+    if (!b.observerOk || b.third) throw new Error('ERR_NO_OBSERVER');
+    if (b.status !== 'confirmed') throw new Error(b.status === 'cancelled' ? 'ERR_CANCELLED' : 'ERR_NOT_CONFIRMED');
+    if (participants_(b).some(function (n) { return key_(n) === key_(name); })) throw new Error('ERR_ALREADY_IN');
+    if (b.observer) { if (key_(b.observer) === key_(name)) return { unchanged: true }; throw new Error('ERR_OBSERVER_TAKEN'); }
+    const start = startOf_(b);
+    if (start && start.getTime() <= Date.now()) throw new Error('ERR_EXPIRED');
+    b.observer = name;
+    sheet.getRange(row, 19).setValue(name);
+    if (b.eventId) addAttendee_(b.eventId, name);
+    return { event: 'observer', actor: name };
+  }, lang, k);
+}
+
+function leaveObserver(id, k, lang) {
+  const name = actor_(k).name;
+  return withBooking_(id, function (b, row, sheet) {
+    if (!b.observer || key_(b.observer) !== key_(name)) return { unchanged: true };
+    b.observer = '';
+    sheet.getRange(row, 19).setValue('');
+    if (b.eventId) dropAttendee_(b.eventId, name);
+    return { event: 'observerLeft', actor: name };
+  }, lang, k);
+}
+
+function addAttendee_(eventId, name) {
+  if (typeof Calendar === 'undefined') return;
+  try {
+    const p = readPeople_().find(function (x) { return key_(x.name) === key_(name); }) || {};
+    if (!p.email) return;
+    const ev = Calendar.Events.get('primary', eventId);
+    const have = (ev.attendees || []).some(function (x) { return String(x.email).toLowerCase() === p.email.toLowerCase(); });
+    if (have) return;
+    const attendees = (ev.attendees || []).concat([{ email: p.email }]);
+    Calendar.Events.patch({ attendees: attendees }, 'primary', eventId, { sendUpdates: 'all' });
+  } catch (e) { console.error('Calendar attendee not added: ' + e); }
+}
+
 function withBooking_(id, change, lang, k) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -652,7 +698,8 @@ function withBooking_(id, change, lang, k) {
       const b = { id: String(r[0]), by: String(r[2]), with: String(r[3]), date: asDate_(r[4]), time: asTime_(r[5]),
         format: String(r[6]), note: String(r[7]), third: String(r[9] || ''),
         confirmedBy: String(r[10] || '').split(',').map(function (x) { return x.trim(); }).filter(String),
-        meet: String(r[11] || ''), eventId: String(r[12] || ''), status: String(r[8] || 'proposed') };
+        meet: String(r[11] || ''), eventId: String(r[12] || ''), status: String(r[8] || 'proposed'),
+        observerOk: String(r[17]).toLowerCase() === 'yes' || r[17] === true, observer: String(r[18] || '') };
       const out = change(b, i + 1, sheet);
       if (out.unchanged) { const same = sessionsData_(k); same.emailed = []; return same; }
       const data = sessionsData_(k);
@@ -676,7 +723,7 @@ function pastSessions_() {
   bookingsSheet_().getDataRange().getValues().slice(1).forEach(function (r) {
     if (String(r[8]) !== 'confirmed') return;
     const b = { id: String(r[0]), by: String(r[2]), with: String(r[3]), third: String(r[9] || ''), date: asDate_(r[4]), time: asTime_(r[5]),
-                format: String(r[6]) };
+                format: String(r[6]), observer: String(r[18] || '') };
     const st = startOf_(b);
     if (!st || st.getTime() + CONFIG.SESSION_MINUTES * 60000 > t || st.getTime() < from) return;
     out.push(b);
@@ -716,7 +763,7 @@ function getFeedback(k) {
     });
   }
   sessions.forEach(function (b) {
-    b.canWrite = participants_(b).some(function (n) { return key_(n) === key_(me.name); });
+    b.canWrite = participants_(b).concat(b.observer ? [b.observer] : []).some(function (n) { return key_(n) === key_(me.name); });
     b.comments.sort(function (a, c) { return a.at.localeCompare(c.at); });
   });
   return { sessions: sessions };
@@ -729,7 +776,7 @@ function addFeedback(k, sessionId, text, lang) {
   if (body.length > 1500) throw new Error('ERR_TOO_LONG');
   const b = pastSessions_().find(function (x) { return x.id === String(sessionId); });
   if (!b) throw new Error('ERR_NOT_FOUND');
-  if (!participants_(b).some(function (n) { return key_(n) === key_(me.name); })) throw new Error('ERR_ONLY_PAIR');
+  if (!participants_(b).concat(b.observer ? [b.observer] : []).some(function (n) { return key_(n) === key_(me.name); })) throw new Error('ERR_ONLY_PAIR');
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -950,13 +997,19 @@ const MAIL = {
     declined: { subject: function (v) { return v.actorFirst + ' ha rifiutato l\'invito · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' ha rifiutato l\'invito a questa sessione di pratica, che quindi è annullata:'; },
       action: 'Se volete, potete proporne un\'altra in un altro orario dall\'app.', button: 'Apri l\'app' },
+    observer: { subject: function (v) { return v.actor + ' parteciperà come osservatore · ' + v.whenShort; },
+      lead: function (v) { return v.actor + ' parteciperà come osservatore alla vostra sessione di pratica. Non serve approvare: riceve l\'invito del calendario con il link Meet.'; },
+      action: 'Buona pratica!', button: 'Apri l\'app' },
+    observerLeft: { subject: function (v) { return v.actorFirst + ' non sarà più osservatore · ' + v.whenShort; },
+      lead: function (v) { return v.actor + ' non parteciperà più come osservatore alla vostra sessione di pratica, che resta confermata:'; },
+      action: 'Buona pratica!', button: 'Apri l\'app' },
     left: { subject: function (v) { return v.actorFirst + ' non parteciperà · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' non parteciperà a questa sessione di pratica, che ' + (v.on ? 'resta confermata:' : 'resta in programma per voi due:'); },
       action: 'Buona pratica!', button: 'Apri l\'app' },
     cancelled: { subject: function (v) { return 'Sessione di pratica annullata · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' ha annullato questa sessione di pratica:'; },
       action: 'Se volete, potete proporne un\'altra dall\'app.', button: 'Apri l\'app' },
-    labels: { when: 'Quando', format: 'Formato', who: 'Partecipanti', note: 'Nota', at: 'alle', and: 'e', meet: 'Google Meet', app: 'App',
+    labels: { when: 'Quando', format: 'Formato', who: 'Partecipanti', observer: 'Osservatore', note: 'Nota', at: 'alle', and: 'e', meet: 'Google Meet', app: 'App',
               italy: 'ora italiana', local: 'Da te' },
     formats: { 'Online': 'Online', 'In person': 'In presenza' },
     footer: 'Ricevi questa email perché hai inserito le tue disponibilità per la pratica SE tra compagni di corso.',
@@ -976,13 +1029,19 @@ const MAIL = {
     declined: { subject: function (v) { return v.actorFirst + ' declined the invitation · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' declined the invitation to this practice session, so it is cancelled:'; },
       action: 'You can propose another time from the app.', button: 'Open the app' },
+    observer: { subject: function (v) { return v.actor + ' will join as an observer · ' + v.whenShort; },
+      lead: function (v) { return v.actor + ' will join your practice session as an observer. No approval needed: they receive the calendar invitation with the Meet link.'; },
+      action: 'Enjoy the practice!', button: 'Open the app' },
+    observerLeft: { subject: function (v) { return v.actorFirst + ' will no longer observe · ' + v.whenShort; },
+      lead: function (v) { return v.actor + ' will no longer join your practice session as an observer. The session stays confirmed:'; },
+      action: 'Enjoy the practice!', button: 'Open the app' },
     left: { subject: function (v) { return v.actorFirst + ' will not take part · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' will not take part in this practice session, which ' + (v.on ? 'stays confirmed:' : 'stays planned for the two of you:'); },
       action: 'Enjoy the practice!', button: 'Open the app' },
     cancelled: { subject: function (v) { return 'Practice session cancelled · ' + v.whenShort; },
       lead: function (v) { return v.actor + ' cancelled this practice session:'; },
       action: 'You can propose another one from the app.', button: 'Open the app' },
-    labels: { when: 'When', format: 'Format', who: 'People', note: 'Note', at: 'at', and: 'and', meet: 'Google Meet', app: 'App',
+    labels: { when: 'When', format: 'Format', who: 'People', observer: 'Observer', note: 'Note', at: 'at', and: 'and', meet: 'Google Meet', app: 'App',
               italy: 'Italian time', local: 'Your time' },
     formats: { 'Online': 'Online', 'In person': 'In person' },
     footer: 'You receive this email because you shared your availability for SE peer practice.',
@@ -1028,6 +1087,7 @@ function notify_(event, b, people, lang, actor, everyone) {
       }
       rows.push([t.labels.format, t.formats[b.format] || b.format]);
       if (all.length > 2 || event === 'scheduled') rows.push([t.labels.who, joinNames(all)]);
+      if (b.observer) rows.push([t.labels.observer, b.observer]);
       if (event === 'scheduled' && b.meet) rows.push([t.labels.meet, b.meet]);
       if (b.note) rows.push([t.labels.note, b.note]);
 

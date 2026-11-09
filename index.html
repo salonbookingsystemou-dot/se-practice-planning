@@ -290,6 +290,10 @@
   .avatar-btn { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; }
   .form-error { color: var(--danger); font-size: 13px; margin: 0; }
   .hint { font-size: 12px; color: var(--muted); margin: 0; }
+  .obs-opt { gap: 6px; }
+  .obs-opt[hidden] { display: none; }
+  .obs-opt .switch { font-weight: 500; }
+  .obs-note { white-space: nowrap; }
 
   .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 12px 18px; border-radius: var(--r-sm); font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; }
   .toast.show { opacity: 1; }
@@ -401,6 +405,10 @@
     <div class="field"><label for="b-by" data-i18n="yourName"></label><input type="text" id="b-by" readonly></div>
     <div class="field"><label for="b-with" data-i18n="with"></label><select id="b-with" required></select></div>
     <div class="field"><label for="b-third" data-i18n="third"></label><select id="b-third"></select></div>
+    <div class="field obs-opt" id="b-obs-wrap">
+      <label class="switch"><input type="checkbox" id="b-obs"><span class="track" aria-hidden="true"></span><span data-i18n="observerOpt"></span></label>
+      <p class="hint" data-i18n="observerOptHint"></p>
+    </div>
     <div class="two">
       <div class="field"><label for="b-date" data-i18n="date"></label><input type="date" id="b-date" required></div>
       <div class="field"><label for="b-time" data-i18n="time"></label><input type="time" id="b-time" step="900" required></div>
@@ -520,6 +528,12 @@ const STR = {
     emailedDecline: (n) => `Invito rifiutato. Abbiamo avvisato ${n} via email.`, remindWa: 'Ricorda su WhatsApp', cancelSession: 'Annulla',
     dlgTitle: 'Proponi una sessione', yourName: 'Il tuo nome', with: 'Con', date: 'Data', time: 'Ora',
     third: 'Terzo partecipante (facoltativo, per una triade)', nobody: 'Nessuno · sessione a due',
+    observerOpt: 'Consenti la partecipazione di un osservatore', observerOptHint: 'Una volta confermata, uno studente potrà unirsi come osservatore senza bisogno di approvazione: riceverete un\'email.',
+    observerOpen: 'aperta a un osservatore', observerIs: (n) => `osservatore: ${n}`, you: 'tu', joinObserver: 'Partecipa come osservatore', leaveObserver: 'Non partecipo più come osservatore',
+    observerAsk: 'Partecipare a questa sessione come osservatore? Gli organizzatori riceveranno un\'email e tu l\'invito del calendario con il link Meet.',
+    leaveObserverAsk: 'Non partecipare più come osservatore? Gli organizzatori riceveranno un\'email.', busyObserver: 'Mi unisco…',
+    observerToast: (n) => `Fatto: sei l'osservatore. Abbiamo avvisato ${n}; l'invito con il link Meet arriva nel tuo calendario.`, observerToastNoMail: 'Fatto: sei l\'osservatore. L\'invito con il link Meet arriva nel tuo calendario.',
+    leftObserverToast: 'Non sei più l\'osservatore di questa sessione.', meetByCalendar: 'link Meet nel tuo calendario',
     format: 'Formato', note: 'Nota (facoltativa)', notePh: 'es. link della videochiamata, chi fa il praticante…',
     and: 'e', partial: (n, m) => `Confermata da ${n} su ${m}`,
     cancel: 'Annulla', propose: 'Proponi',
@@ -585,7 +599,7 @@ const STR = {
       ERR_DATE: 'Scegli una data.', ERR_TIME: 'Scegli un orario.', ERR_PAST: 'Data e ora sono già passate.',
       ERR_CLASH: (a, b, t) => `${a} e ${b} hanno già una sessione alle ${t} quel giorno.`,
       ERR_ONLY_INVITED: 'Solo la persona invitata può confermare.',
-      ERR_ONLY_PAIR: 'Solo le due persone della sessione possono annullarla.', ERR_NOT_FOUND: 'Sessione non trovata.',
+      ERR_ONLY_PAIR: 'Solo le due persone della sessione possono annullarla.', ERR_NO_OBSERVER: 'Questa sessione non è aperta a un osservatore.', ERR_OBSERVER_TAKEN: 'Un altro studente si è già unito come osservatore.', ERR_NOT_CONFIRMED: 'La sessione non è ancora confermata.', ERR_ALREADY_IN: 'Fai già parte di questa sessione.', ERR_NOT_FOUND: 'Sessione non trovata.',
     },
     days: ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'], daysMini: ['Lu','Ma','Me','Gi','Ve','Sa','Do'],
     daysLong: ['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'],
@@ -633,6 +647,12 @@ const STR = {
     emailedDecline: (n) => `Invitation declined. We emailed ${n}.`, remindWa: 'Remind on WhatsApp', cancelSession: 'Cancel',
     dlgTitle: 'Propose a session', yourName: 'Your name', with: 'With', date: 'Date', time: 'Time',
     third: 'Third person (optional, for a triad)', nobody: 'Nobody · session for two',
+    observerOpt: 'Allow an observer to join', observerOptHint: 'Once confirmed, one student can join as an observer without approval: you will get an email.',
+    observerOpen: 'open to an observer', observerIs: (n) => `observer: ${n}`, you: 'you', joinObserver: 'Join as an observer', leaveObserver: 'Stop observing',
+    observerAsk: 'Join this session as an observer? The organisers will get an email and you the calendar invitation with the Meet link.',
+    leaveObserverAsk: 'Stop joining as an observer? The organisers will get an email.', busyObserver: 'Joining…',
+    observerToast: (n) => `Done: you are the observer. We told ${n}; the invitation with the Meet link arrives in your calendar.`, observerToastNoMail: 'Done: you are the observer. The invitation with the Meet link arrives in your calendar.',
+    leftObserverToast: 'You are no longer the observer of this session.', meetByCalendar: 'Meet link in your calendar',
     format: 'Format', note: 'Note (optional)', notePh: 'e.g. video call link, who is the practitioner…',
     and: 'and', partial: (n, m) => `Confirmed by ${n} of ${m}`,
     cancel: 'Cancel', propose: 'Propose',
@@ -697,7 +717,7 @@ const STR = {
       ERR_DATE: 'Choose a date.', ERR_TIME: 'Choose a time.', ERR_PAST: 'That date and time have already passed.',
       ERR_CLASH: (a, b, t) => `${a} and ${b} already have a session at ${t} that day.`,
       ERR_ONLY_INVITED: 'Only the invited person can confirm.',
-      ERR_ONLY_PAIR: 'Only the two people in the session can cancel it.', ERR_NOT_FOUND: 'Session not found.',
+      ERR_ONLY_PAIR: 'Only the two people in the session can cancel it.', ERR_NO_OBSERVER: 'This session is not open to an observer.', ERR_OBSERVER_TAKEN: 'Another student already joined as the observer.', ERR_NOT_CONFIRMED: 'The session is not confirmed yet.', ERR_ALREADY_IN: 'You are already part of this session.', ERR_NOT_FOUND: 'Session not found.',
     },
     days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], daysMini: ['Mo','Tu','We','Th','Fr','Sa','Su'],
     daysLong: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
@@ -1037,11 +1057,12 @@ function renderPeople() {
   }).join('');
 }
 
+const SESSION_MIN = 60;   // same as SESSION_MINUTES in the engine
 function renderSessions() {
   const t = T();
   // drop unconfirmed sessions whose start time passed while the page was open
   state.bookings = state.bookings.filter(b => b.status === 'confirmed'
-    ? romeInstant(b.date, b.time).getTime() + 90 * 60000 > Date.now()
+    ? romeInstant(b.date, b.time).getTime() + SESSION_MIN * 60000 > Date.now()
     : romeInstant(b.date, b.time).getTime() > Date.now());
   $('c-sessions').textContent = state.bookings.length;
   const box = $('sessions');
@@ -1063,15 +1084,22 @@ function renderSessions() {
         ? inv.filter(n => !done.includes(n)).map(n => [n, waInvite(b, n)]).filter(x => x[1]) : [];
       const statusLabel = b.status === 'confirmed' ? t.confirmed : done.length ? t.partial(done.length, inv.length) : t.proposed;
       const statusClass = b.status === 'confirmed' ? 'confirmed' : done.length ? 'partial' : 'proposed';
+      // observer: a pair can open the session to one observer, who joins with one click once it is confirmed
+      const iObserve = me && b.observer && key(b.observer) === me;
+      const started = romeInstant(b.date, b.time).getTime() <= Date.now();
+      const canObserve = b.observerOk && !b.observer && b.status === 'confirmed' && !mine && !started;
+      const obsNote = b.observerOk ? (b.observer ? t.observerIs(iObserve ? t.you : first(b.observer)) : t.observerOpen) : '';
       return `<div class="session">
         <span class="time">${esc(localOf(b).time)}<br><span class="local-note">${esc(partOfDay(localOf(b).time))}</span>${iAmAbroad() ? `<br><span class="local-note">${esc(t.inItaly(timeLabel(b.time)))}</span>` : ''}</span>
         <div class="pair"><strong>${esc(b.by)}</strong> ${esc(t.withWord)} ${inv.map(n => `<strong>${esc(n)}</strong>`).join(' ' + esc(t.and) + ' ')}
-          <div class="meta">${esc(tv(b.format))}${b.note ? ' · ' + esc(b.note) : ''}${b.status === 'confirmed' && mine && b.format !== 'In person' ? ' · ' + esc(t.meetByEmail) : ''}${b.status === 'confirmed' && pendingNames.length ? ' · ' + esc(canConfirm ? t.youCanJoin : t.notYet(joinNames(pendingNames.map(first)))) : ''}</div></div>
+          <div class="meta">${esc(tv(b.format))}${b.note ? ' · ' + esc(b.note) : ''}${b.status === 'confirmed' && mine && b.format !== 'In person' ? ' · ' + esc(t.meetByEmail) : ''}${b.status === 'confirmed' && pendingNames.length ? ' · ' + esc(canConfirm ? t.youCanJoin : t.notYet(joinNames(pendingNames.map(first)))) : ''}${obsNote ? ` · <span class="obs-note">👁 ${esc(obsNote)}</span>` : ''}${iObserve && b.format !== 'In person' ? ' · ' + esc(t.meetByCalendar) : ''}</div></div>
         <span class="status ${statusClass}">${esc(statusLabel)}</span>
         ${mine ? `<div class="actions">
           ${canConfirm ? `<button class="btn btn-small" data-confirm="${esc(b.id)}">${esc(t.confirm)}</button>` : ''}
           ${reminders.map(([n, wa]) => `<a class="btn btn-ghost btn-small btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${esc(inv.length > 1 ? t.waTo(first(n)) : t.remindWa)}</a>`).join('')}
           <button class="btn btn-ghost btn-small btn-danger" data-cancel="${esc(b.id)}" ${canConfirm ? `data-decline="${inv.length > 1 ? 'keep' : '1'}"` : ''}>${esc(canConfirm ? t.decline : t.cancelSession)}</button></div>` : ''}
+        ${canObserve ? `<div class="actions"><button class="btn btn-small btn-observe" data-observe="${esc(b.id)}">👁 ${esc(t.joinObserver)}</button></div>` : ''}
+        ${iObserve && !started ? `<div class="actions"><button class="btn btn-ghost btn-small" data-unobserve="${esc(b.id)}">${esc(t.leaveObserver)}</button></div>` : ''}
       </div>`;
     }).join('') + '</div>';
   }).join('');
@@ -1085,7 +1113,7 @@ function openBooking(withName, now) {
   $('b-by').value = state.me;
   $('b-with').innerHTML = state.people.filter(p => key(p.name) !== key(state.me))
     .map(p => `<option ${key(p.name)===key(withName)?'selected':''}>${esc(p.name)}</option>`).join('');
-  fillThird('');
+  fillThird(''); $('b-obs').checked = false; syncObs();
   $('b-date').min = state.today; $('b-date').value = '';
   $('b-time').value = ''; $('b-note').value = ''; $('b-error').textContent = '';
   if (now) {   // "Propose now": today, at the next quarter of an hour
@@ -1158,14 +1186,16 @@ $('d-copy').onclick = async () => {
   toast(T().copied);
 };
 
-$('b-with').onchange = () => { fillThird(); updateHint(); };
-$('b-third').onchange = updateHint;
+$('b-with').onchange = () => { fillThird(); syncObs(); updateHint(); };
+/* An observer only for a pair: the option disappears when a third person is chosen */
+function syncObs() { const pair = !$('b-third').value; $('b-obs-wrap').hidden = !pair; if (!pair) $('b-obs').checked = false; }
+$('b-third').onchange = () => { syncObs(); updateHint(); };
 $('b-cancel').onclick = () => $('dlg').close();
 function blockEsc(e) { e.preventDefault(); }   // no closing the window while the proposal is being sent
 $('book').onsubmit = async (e) => {
   e.preventDefault();
   const input = { key: myKey(), by: state.me, with: $('b-with').value, third: $('b-third').value, date: $('b-date').value, time: $('b-time').value,
-                  format: $('b-format').value, note: $('b-note').value.trim(), lang: state.lang };
+                  format: $('b-format').value, note: $('b-note').value.trim(), lang: state.lang, observerOk: !$('b-third').value && $('b-obs').checked };
   if (!input.key) { $('dlg').close(); return openLogin(T().needLogin); }
   if (input.date && input.time) Object.assign(input, localInputToRome(input.date, input.time));   // stored in Italian time
   $('b-error').textContent = '';
@@ -1630,11 +1660,23 @@ $('ph-save').onclick = async () => {
 
 document.addEventListener('click', async (e) => {
   if (e.target.closest('[data-photo]')) return openPhoto();
-  const el = e.target.closest('[data-book],[data-confirm],[data-cancel]');
+  const el = e.target.closest('[data-book],[data-confirm],[data-cancel],[data-observe],[data-unobserve]');
   if (!el) return;
   if (el.dataset.book) return openBooking(el.dataset.book, !!el.dataset.now);
   const t = T();
   if (!myKey()) return openLogin(t.needLogin);
+  if (el.dataset.observe || el.dataset.unobserve) {
+    const joining = !!el.dataset.observe;
+    if (!confirm(joining ? t.observerAsk : t.leaveObserverAsk)) return;
+    const done = busy(el, joining ? t.busyObserver : t.busyCancelling);
+    try {
+      const d = await call(joining ? 'joinAsObserver' : 'leaveObserver', el.dataset.observe || el.dataset.unobserve, myKey(), state.lang); apply(d);
+      const names = joinNames(asList(d.emailed).map(first));
+      toast(joining ? (names ? t.observerToast(names) : t.observerToastNoMail) : t.leftObserverToast);
+    } catch (err) { toast(errMsg(err)); }
+    finally { if (document.body.contains(el)) done(); }
+    return;
+  }
   const declining = !!el.dataset.decline;
   if (el.dataset.cancel && !confirm(el.dataset.decline === 'keep' ? t.declineKeepAsk : declining ? t.declineAsk : t.cancelAsk)) return;
   const row = el.closest('.session');
@@ -1778,6 +1820,11 @@ function demo(fn, ...args) {
     if (!wasOn) return { ...JSON.parse(JSON.stringify(db)), scheduled: true, meet: b.format !== 'In person' };
   }
   if (fn === 'cancelBooking') db.bookings = db.bookings.filter(b => b.id !== args[0]);
+  if (fn === 'joinAsObserver' || fn === 'leaveObserver') {
+    const b = db.bookings.find(x => x.id === args[0]); const who = actor(args[1]);
+    if (fn === 'joinAsObserver') { if (b.observer) throw new Error('ERR_OBSERVER_TAKEN'); b.observer = who; return { ...JSON.parse(JSON.stringify(db)), emailed: [b.by, b.with] }; }
+    b.observer = '';
+  }
   db.bookings.sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
   return JSON.parse(JSON.stringify(db));
 }

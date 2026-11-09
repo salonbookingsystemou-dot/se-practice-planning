@@ -160,6 +160,13 @@ Se poi conferma, gli altri ricevono un avviso (nessun secondo link Meet). Se rif
 e la sessione resta per gli altri due. Lo stesso vale prima di ogni conferma: se in una triade un invitato rifiuta,
 la sessione resta in programma come coppia. Il contatore «sessioni fatte» e il riepilogo «hanno appena praticato» contano solo chi ha confermato.
 
+## Osservatore (solo sessioni a due)
+Nel modulo di proposta, se non c'è un terzo partecipante, compare l'opzione «Consenti la partecipazione di un osservatore».
+Quando la sessione è confermata, nel tab Sessioni gli altri studenti connessi vedono «Partecipa come osservatore».
+Il primo che clicca diventa l'osservatore, senza approvazione: la coppia riceve un'email e l'osservatore viene aggiunto
+all'evento del calendario (con il link Meet). Può ritirarsi prima dell'inizio, con un'altra email alla coppia.
+Un osservatore per sessione; può scrivere nel Feedback della sessione. Colonne «Observer allowed» e «Observer» nel foglio Bookings.
+
 ## Knowledge base
 Tab **Knowledge base**, visibile solo agli studenti che hanno fatto l'accesso: appunti, articoli, video, libri, esercizi
 condivisi dal gruppo, con ricerca e filtro per tipo. Tutti leggono e aggiungono; ognuno può eliminare solo le proprie risorse.
