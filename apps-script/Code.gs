@@ -780,7 +780,7 @@ function addFeedback(k, sessionId, text, lang) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    feedbackSheet_().appendRow([Utilities.getUuid().slice(0, 8), b.id, me.name, new Date(), cell_(body)]);
+    feedbackSheet_().appendRow([Utilities.getUuid().slice(0, 8), b.id, me.name, new Date(), safeCell_(body)]);
   } finally { lock.releaseLock(); }
   notifyFeedback_(b, me, body, lang);
   return getFeedback(k);
@@ -804,7 +804,7 @@ function deleteFeedback(k, commentId) {
 }
 
 /* Text typed by students must never become a formula in the sheet */
-function cell_(v) { v = String(v || ''); return /^[=+\-@\t\r]/.test(v) ? "'" + v : v; }
+function safeCell_(v) { v = String(v || ''); return /^[=+\-@\t\r]/.test(v) ? "'" + v : v; }
 
 /* ---------- Knowledge base ----------
    Notes, articles, videos and other resources shared by students. Every signed-in student reads and adds; only the author deletes. */
@@ -844,7 +844,7 @@ function addResource(k, item) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    kbSheet_().appendRow([Utilities.getUuid().slice(0, 8), me.name, new Date(), cat, cell_(title), cell_(text), link]);
+    kbSheet_().appendRow([Utilities.getUuid().slice(0, 8), me.name, new Date(), cat, safeCell_(title), safeCell_(text), link]);
   } finally { lock.releaseLock(); }
   return getResources(k);
 }
