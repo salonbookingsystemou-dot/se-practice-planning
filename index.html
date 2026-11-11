@@ -996,10 +996,13 @@ function renderPeople() {
     if (state.nowOnly && !freeUntil(p)) return false;
     return true;
   });
-  if (m) list = list.map(p => ({ p, s: shared(p, m) }))
-    .sort((a,b) => (a.s ? 0 : -1) - (b.s ? 0 : -1) || (b.s?.score||0) - (a.s?.score||0) || a.p.name.localeCompare(b.p.name))
+  // most sessions done first; ties: free right now, then best match with me, then name
+  list = list.map(p => ({ p, s: m ? shared(p, m) : null }))
+    .sort((a, b) => (b.p.done || 0) - (a.p.done || 0)
+      || (freeUntil(b.p) ? 1 : 0) - (freeUntil(a.p) ? 1 : 0)
+      || (b.s?.score || 0) - (a.s?.score || 0)
+      || a.p.name.localeCompare(b.p.name))
     .map(x => x.p);
-  list.sort((a, b) => (freeUntil(b) ? 1 : 0) - (freeUntil(a) ? 1 : 0));   // free right now first (stable: keeps the order above)
 
   $('c-people').textContent = state.people.length;
   const box = $('people');
