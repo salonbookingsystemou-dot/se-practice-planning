@@ -465,6 +465,14 @@ function joinNames_(list, lang) {
   return list.length < 2 ? (list[0] || '') : list.slice(0, -1).join(', ') + and + list[list.length - 1];
 }
 
+/* Every 15 minutes: pairs already free together that nobody told yet (e.g. both switched on before this existed) */
+function sweepFreeNow_() {
+  const free = readNow_();
+  var n = 0;
+  Object.keys(free).forEach(function (name) { try { n += notifyFreeNow_({ name: name }, new Date(free[name])) || 0; } catch (e) { console.error(e); } });
+  return n;
+}
+
 function notifyFreeNow_(me, until) {
   if (!CONFIG.SEND_EMAILS) return;
   const free = readNow_(), cache = CacheService.getScriptCache(), now = Date.now();
@@ -481,7 +489,7 @@ function notifyFreeNow_(me, until) {
     cache.put(pair, '1', Math.max(60, Math.min(21600, Math.round((end - now) / 1000))));
     fresh.push({ name: name, mins: Math.max(5, Math.round((end - now) / 60000)) });
   });
-  if (!fresh.length) return;
+  if (!fresh.length) return 0;
   const send = function (toName, others, mins, replyTo) {
     const p = person(toName), l = MAIL[langs[toName]] ? langs[toName] : 'it', m = FREE_MAIL[l];
     const v = { others: joinNames_(others.map(first), l), many: others.length > 1, mins: mins };
@@ -493,6 +501,7 @@ function notifyFreeNow_(me, until) {
   send(me.name, fresh.map(function (f) { return f.name; }), Math.max.apply(null, fresh.map(function (f) { return f.mins; })),
        fresh.length === 1 ? person(fresh[0].name).email : '');
   fresh.forEach(function (f) { send(f.name, [me.name], f.mins, person(me.name).email); });
+  return fresh.length;
 }
 
 function readNow_() {
@@ -1242,9 +1251,10 @@ function digestNow() {   // periodic trigger: reminders, then the digest
   const starting = remindStarting_();
   const soon = remindSoon_();
   const promoted = promoteTriads_();
+  const freeNow = sweepFreeNow_();
   const reminders = remindPending_();
   const digest = runDigest_();
-  const result = 'promoted: ' + promoted + ' · starting: ' + starting + ' · soon: ' + soon + ' · reminders: ' + reminders + ' · digest: ' + digest;
+  const result = 'promoted: ' + promoted + ' · free now pairs: ' + freeNow + ' · starting: ' + starting + ' · soon: ' + soon + ' · reminders: ' + reminders + ' · digest: ' + digest;
   const props = PropertiesService.getScriptProperties();
   props.setProperty('LAST_RUN', new Date().toISOString()); props.setProperty('LAST_RUN_RESULT', result);
   return result;
