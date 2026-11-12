@@ -443,10 +443,56 @@ function setFreeNow(k, minutes) {
     for (var i = 1; i < values.length; i++) { if (key_(values[i][0]) === key_(p.name)) { row = i + 1; break; } }
     if (row > 0) sheet.getRange(row, 2).setValue(until);
     else if (until) sheet.appendRow([p.name, until]);
+    if (until) try { notifyFreeNow_(p, until); } catch (e) { console.error('Free-now email not sent: ' + e); }
     return getNow(k);
   } finally {
     lock.releaseLock();
   }
+}
+
+/* Two or more people free right now: each pair is told once per free window, by email (reply goes to the other person) */
+const FREE_MAIL = {
+  it: { subject: function (v) { return v.others + (v.many ? ' sono disponibili' : ' è disponibile') + ' ora per una sessione di pratica'; },
+        lead: function (v) { return 'In questo momento ' + v.others + (v.many ? ' sono disponibili' : ' è disponibile') + ' per una sessione di pratica, come te (ancora circa ' + v.mins + ' minuti). Rispondi a questa email, scrivi su WhatsApp o proponi una sessione dall\'app.'; },
+        button: 'Apri l\'app' },
+  en: { subject: function (v) { return v.others + (v.many ? ' are' : ' is') + ' free now for a practice session'; },
+        lead: function (v) { return 'Right now ' + v.others + (v.many ? ' are' : ' is') + ' free for a practice session, like you (for about ' + v.mins + ' more minutes). Reply to this email, message on WhatsApp or propose a session in the app.'; },
+        button: 'Open the app' },
+};
+
+function joinNames_(list, lang) {
+  const and = ' ' + MAIL[lang].labels.and + ' ';
+  return list.length < 2 ? (list[0] || '') : list.slice(0, -1).join(', ') + and + list[list.length - 1];
+}
+
+function notifyFreeNow_(me, until) {
+  if (!CONFIG.SEND_EMAILS) return;
+  const free = readNow_(), cache = CacheService.getScriptCache(), now = Date.now();
+  const people = readPeople_(), langs = readLangs_();
+  const person = function (n) { return people.find(function (x) { return key_(x.name) === key_(n); }) || { name: n }; };
+  const first = function (n) { return String(n).split(/\s+/)[0]; };
+  const fresh = [];   // others free now whom I have not been paired with in this window
+  Object.keys(free).forEach(function (name) {
+    if (key_(name) === key_(me.name)) return;
+    const end = Math.min(until.getTime(), new Date(free[name]).getTime());
+    if (end <= now) return;
+    const pair = 'freepair_' + [personKey_(me.name), personKey_(name)].sort().join('_');
+    if (cache.get(pair)) return;
+    cache.put(pair, '1', Math.max(60, Math.min(21600, Math.round((end - now) / 1000))));
+    fresh.push({ name: name, mins: Math.max(5, Math.round((end - now) / 60000)) });
+  });
+  if (!fresh.length) return;
+  const send = function (toName, others, mins, replyTo) {
+    const p = person(toName), l = MAIL[langs[toName]] ? langs[toName] : 'it', m = FREE_MAIL[l];
+    const v = { others: joinNames_(others.map(first), l), many: others.length > 1, mins: mins };
+    const url = personalUrl_(toName);
+    const html = mailFrame_(m.lead(v), '', url, m.button, MAIL[l].footer);
+    try { sendLogged_('freenow', p.name, p.email, m.subject(v), m.lead(v) + '\n\n' + url, replyOpts_(html, replyTo), ''); } catch (e) { /* logged */ }
+  };
+  // to me: everyone newly matched; to each of them: just me
+  send(me.name, fresh.map(function (f) { return f.name; }), Math.max.apply(null, fresh.map(function (f) { return f.mins; })),
+       fresh.length === 1 ? person(fresh[0].name).email : '');
+  fresh.forEach(function (f) { send(f.name, [me.name], f.mins, person(me.name).email); });
 }
 
 function readNow_() {

@@ -167,6 +167,11 @@ Il primo che clicca diventa l'osservatore, senza approvazione: la coppia riceve 
 all'evento del calendario (con il link Meet). Può ritirarsi prima dell'inizio, con un'altra email alla coppia.
 Un osservatore per sessione; può scrivere nel Feedback della sessione. Colonne «Observer allowed» e «Observer» nel foglio Bookings.
 
+## «Ora sono libero»: email quando due persone coincidono
+Quando qualcuno attiva «Ora sono libero» e c'è già almeno un'altra persona libera, entrambe ricevono un'email
+(«Franco è disponibile ora per una sessione di pratica»); rispondendo all'email si scrive direttamente all'altra persona.
+Ogni coppia viene avvisata una sola volta per finestra di disponibilità. Nel Mail log il tipo è «freenow».
+
 ## Knowledge base
 Tab **Knowledge base**, visibile solo agli studenti che hanno fatto l'accesso: appunti, articoli, video, libri, esercizi
 condivisi dal gruppo, con ricerca e filtro per tipo. Tutti leggono e aggiungono; ognuno può eliminare solo le proprie risorse.
