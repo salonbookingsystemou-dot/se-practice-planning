@@ -247,6 +247,23 @@
   .ph-pick { display: inline-flex; justify-content: center; align-items: center; gap: 6px; cursor: pointer; }
   .ph-note { margin: 0; padding: 12px 14px; border-radius: var(--r-md); background: var(--accent-soft); color: var(--accent); font-size: 14px; }
   /* "Free right now" */
+  .free-now { background: color-mix(in srgb, var(--ochre) 9%, var(--surface)); border: 1px solid var(--ochre); border-radius: var(--r-lg); padding: 14px 16px 16px; margin-bottom: 22px; }
+  .free-now-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .free-now h2 { display: flex; align-items: center; gap: 8px; margin: 0; font: 600 18px var(--serif); color: var(--ink); }
+  .free-now h2 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ochre); animation: pulse 1.6s ease-in-out infinite; }
+  .free-now-list { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x proximity; }
+  .free-person { flex: 0 0 auto; scroll-snap-align: start; display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; min-width: 0; }
+  .free-person .avatar, .free-person .avatar.photo { width: 40px; height: 40px; font-size: 14px; }
+  .free-person .fp-text { display: grid; gap: 1px; min-width: 0; }
+  .free-person strong { font-size: 15px; white-space: nowrap; }
+  .free-person .fp-until { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .free-person .fp-actions { display: flex; gap: 6px; margin-left: 4px; }
+  .free-person .fp-wa { font-size: 13px; font-weight: 600; color: var(--accent); padding: 6px 8px; white-space: nowrap; }
+  @media (max-width: 600px) {
+    .free-now-list { flex-direction: column; overflow: visible; }
+    .free-person { width: 100%; flex-wrap: wrap; }
+    .free-person .fp-actions { margin-left: auto; }
+  }
   .card.is-free { border-color: var(--ochre); box-shadow: 0 0 0 1px var(--ochre) inset; }
   .free-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: #fff; background: var(--ochre);
                 padding: 3px 10px; border-radius: 99px; }
@@ -359,6 +376,7 @@
     <a class="btn btn-ghost btn-small btn-edit" id="update-link" href="#" target="_blank" rel="noopener"><span aria-hidden="true">✎</span> <span data-i18n="editData"></span></a></p>
 
   <p class="refreshing" id="refreshing" role="status" hidden><span class="spinner" aria-hidden="true"></span><span data-i18n="refreshing"></span></p>
+  <section class="free-now" id="free-now" aria-labelledby="free-now-h" hidden></section>
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" id="tab-people" aria-selected="true" aria-controls="panel-people"><span data-i18n="tabPeople"></span><span class="count" id="c-people">0</span></button>
     <button class="tab" role="tab" id="tab-sessions" aria-selected="false" aria-controls="panel-sessions"><span data-i18n="tabSessions"></span><span class="count" id="c-sessions">0</span></button>
@@ -553,6 +571,7 @@ const STR = {
     copied: 'Messaggio copiato.', chooseFirst: 'Prima scegli il tuo nome in alto.',
     confirmedToast: 'Sessione confermata.', cancelledToast: 'Sessione annullata.', cancelAsk: 'Annullare questa sessione?',
     freeNow: 'Ora sono libero/a', freeUntil: (t) => `Libero/a ora · fino alle ${t}`, freeShort: (t) => `fino alle ${t}`,
+    freeNowTitle: (n) => n === 1 ? 'Disponibile ora per praticare' : `Disponibili ora per praticare · ${n}`, freeMeToo: 'Sono disponibile anche io',
     freeFor: { 30: '30 minuti', 60: '1 ora', 120: '2 ore', 180: '3 ore' }, freeChip: (n) => `Liberi ora${n ? ' · ' + n : ''}`,
     inItaly: (t) => `${t} in Italia`, italyTime: 'ora italiana', yourTime: (t) => `da te alle ${t}`,
     tzBadge: (c, h) => `🌍 ${c} · ${h} rispetto all'Italia`, slotsLocal: (n) => `Le fasce di ${n} sono nella sua ora locale.`,
@@ -672,6 +691,7 @@ const STR = {
     copied: 'Message copied.', chooseFirst: 'Choose your name at the top first.',
     confirmedToast: 'Session confirmed.', cancelledToast: 'Session cancelled.', cancelAsk: 'Cancel this session?',
     freeNow: "I'm free now", freeUntil: (t) => `Free now · until ${t}`, freeShort: (t) => `until ${t}`,
+    freeNowTitle: (n) => n === 1 ? 'Free to practise now' : `Free to practise now · ${n}`, freeMeToo: "I'm free too",
     freeFor: { 30: '30 minutes', 60: '1 hour', 120: '2 hours', 180: '3 hours' }, freeChip: (n) => `Free now${n ? ' · ' + n : ''}`,
     inItaly: (t) => `${t} in Italy`, italyTime: 'Italian time', yourTime: (t) => `${t} your time`,
     tzBadge: (c, h) => `🌍 ${c} · ${h} vs Italy`, slotsLocal: (n) => `${n}'s time slots are in their local time.`,
@@ -983,7 +1003,28 @@ function renderMe() {
   if (url) { $('cta-link').href = url; $('cta-edit').href = url; $('update-link').href = url; }
 }
 
+/* Highlighted strip on top: who is free right now (signed-in students only) */
+function renderFreeNow() {
+  const box = $('free-now'), t = T();
+  const free = myKey() ? state.people.filter(p => freeUntil(p)).sort((a, b) => freeUntil(b) - freeUntil(a)) : [];
+  const me = meP(), meFree = me && freeUntil(me);
+  const others = free.filter(p => !me || p.name !== me.name);
+  box.hidden = !others.length;
+  if (!others.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="free-now-head"><h2 id="free-now-h"><span class="dot" aria-hidden="true"></span>${esc(t.freeNowTitle(others.length))}</h2>
+      ${me && !meFree ? `<button type="button" class="btn btn-ghost btn-small" data-free-me="1">${esc(t.freeMeToo)}</button>` : ''}</div>
+    <div class="free-now-list">${others.map(p => {
+      const wa = waLink(p.phone);
+      return `<div class="free-person">${avatar(p.name)}
+        <div class="fp-text"><strong>${esc(first(p.name))}</strong><span class="fp-until">${esc(t.freeShort(hhmm(freeUntil(p))))}</span></div>
+        <div class="fp-actions">${wa ? `<a class="fp-wa" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
+          <button class="btn btn-small" data-book="${esc(p.name)}" data-now="1">${esc(t.proposeNow)}</button></div></div>`;
+    }).join('')}</div>`;
+}
+document.addEventListener('click', (e) => { if (e.target.closest('[data-free-me]')) setFree(true); });
+
 function renderPeople() {
+  renderFreeNow();
   const t = T();
   const m = meP();
   const q = key(state.q);
