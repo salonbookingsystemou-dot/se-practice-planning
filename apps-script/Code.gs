@@ -63,7 +63,8 @@ function status() {
   }).filter(function (x) { return x.hoursFromNow !== null && x.hoursFromNow > -48 && x.hoursFromNow < 72; });
   return { now: new Date().toISOString(), triggers: triggers, triggerVersion: props.getProperty('TRIGGER_VERSION'),
            lastRun: props.getProperty('LAST_RUN'), lastRunResult: props.getProperty('LAST_RUN_RESULT'),
-           calendarService: typeof Calendar !== 'undefined', mailQuota: quota, sessions: sessions, mailLog: mailLogSummary_() };
+           calendarService: typeof Calendar !== 'undefined', appCalendar: !!PropertiesService.getScriptProperties().getProperty('APP_CALENDAR_ID'),
+           calendarMigration: PropertiesService.getScriptProperties().getProperty('CAL_MIGRATED') || '', mailQuota: quota, sessions: sessions, mailLog: mailLogSummary_() };
 }
 
 function doGet(e) {
@@ -733,11 +734,11 @@ function addAttendee_(eventId, name) {
   try {
     const p = readPeople_().find(function (x) { return key_(x.name) === key_(name); }) || {};
     if (!p.email) return;
-    const ev = Calendar.Events.get('primary', eventId);
+    const cal = eventCal_(eventId), ev = Calendar.Events.get(cal, eventId);
     const have = (ev.attendees || []).some(function (x) { return String(x.email).toLowerCase() === p.email.toLowerCase(); });
     if (have) return;
     const attendees = (ev.attendees || []).concat([{ email: p.email }]);
-    Calendar.Events.patch({ attendees: attendees }, 'primary', eventId, { sendUpdates: 'all' });
+    Calendar.Events.patch({ attendees: attendees }, cal, eventId, { sendUpdates: 'all' });
   } catch (e) { console.error('Calendar attendee not added: ' + e); }
 }
 
@@ -980,6 +981,53 @@ function sendLogged_(type, toName, toEmail, subject, text, opts, bookingId) {
    Uses the advanced "Google Calendar API" service (identifier: Calendar). Without it, the session is still
    confirmed and emailed, just without the Meet link. */
 
+/* Events live in a dedicated, hidden "SE Practice Partners" calendar owned by the script account, not in its main
+   calendar: the organiser shown to guests is "SE Practice Partners", and sessions of other students don't fill
+   the owner's agenda (when the owner takes part, they are invited like everyone else). */
+function appCalendar_() {
+  const props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('APP_CALENDAR_ID');
+  if (id) return id;
+  const cal = Calendar.Calendars.insert({ summary: CONFIG.SENDER_NAME || 'SE Practice Partners', timeZone: CONFIG.TIMEZONE,
+    description: 'Practice sessions organised with ' + appUrl_() });
+  id = cal.id;
+  try { Calendar.CalendarList.patch({ hidden: true, selected: false }, id); } catch (e) { console.error('Calendar not hidden: ' + e); }
+  props.setProperty('APP_CALENDAR_ID', id);
+  return id;
+}
+/* Older events were created in the main calendar: find where an event is */
+function eventCal_(eventId) {
+  const cal = appCalendar_();
+  try { Calendar.Events.get(cal, eventId); return cal; } catch (e) { return 'primary'; }
+}
+
+/* Once: move future sessions still in the main calendar to the app calendar, with the owner invited only to their own */
+function migrateCalendar_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('CAL_MIGRATED') || typeof Calendar === 'undefined') return 'done before';
+  const cal = appCalendar_(), people = readPeople_();
+  const owner = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
+  const values = bookingsSheet_().getDataRange().getValues();
+  var moved = 0, failed = 0;
+  for (var i = 1; i < values.length; i++) {
+    const r = values[i], eventId = String(r[12] || '');
+    if (!eventId || String(r[8]) !== 'confirmed') continue;
+    const b = { by: String(r[2]), with: String(r[3]), third: String(r[9] || ''), date: asDate_(r[4]), time: asTime_(r[5]), observer: String(r[18] || '') };
+    const start = startOf_(b);
+    if (!start || start.getTime() < Date.now()) continue;
+    const emails = participants_(b).concat(b.observer ? [b.observer] : []).map(function (n) {
+      return String((people.find(function (p) { return key_(p.name) === key_(n); }) || {}).email || '').toLowerCase(); }).filter(Boolean);
+    if (emails.indexOf(owner) !== -1) continue;   // the owner takes part: the event stays in their calendar, as it is
+    if (eventCal_(eventId) === cal) continue;     // already in the app calendar
+    try {
+      Calendar.Events.move('primary', eventId, cal, { sendUpdates: 'none' });
+      moved++;
+    } catch (e) { failed++; console.error('Event ' + eventId + ' not moved: ' + e); }
+  }
+  props.setProperty('CAL_MIGRATED', new Date().toISOString() + ' moved ' + moved + ', failed ' + failed);
+  return 'moved ' + moved + ', failed ' + failed;
+}
+
 function createEvent_(b, people, lang) {
   const en = lang === 'en';
   if (!CONFIG.CREATE_MEET || typeof Calendar === 'undefined') return {};
@@ -994,15 +1042,13 @@ function createEvent_(b, people, lang) {
       end: { dateTime: localDateTime_(b.date, b.time, CONFIG.SESSION_MINUTES), timeZone: CONFIG.TIMEZONE },
       attendees: emails.map(function (e) { return { email: e }; }),
       guestsCanSeeOtherGuests: true,
-      // organiser's copy: popup + email 15 min before (participants get their own Calendar defaults with the invitation)
-      reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 15 }, { method: 'email', minutes: 15 }] },
     };
     if (online) {
       resource.conferenceData = { createRequest: { requestId: b.id + '-' + Date.now(), conferenceSolutionKey: { type: 'hangoutsMeet' } } };
     }
     // sendUpdates "all": Google sends its own invitation, so the event (with the Meet link and Google's reminders)
     // shows up in every participant's calendar, not only in the organiser's
-    const ev = Calendar.Events.insert(resource, 'primary', { conferenceDataVersion: 1, sendUpdates: 'all' });
+    const ev = Calendar.Events.insert(resource, appCalendar_(), { conferenceDataVersion: 1, sendUpdates: 'all' });
     const video = ((ev.conferenceData && ev.conferenceData.entryPoints) || []).find(function (e) { return e.entryPointType === 'video'; });
     return { eventId: ev.id, meet: ev.hangoutLink || (video && video.uri) || '' };
   } catch (e) {
@@ -1015,15 +1061,15 @@ function dropAttendee_(eventId, name) {
   if (typeof Calendar === 'undefined') return;
   try {
     const p = readPeople_().find(function (x) { return key_(x.name) === key_(name); }) || {};
-    const ev = Calendar.Events.get('primary', eventId);
+    const cal = eventCal_(eventId), ev = Calendar.Events.get(cal, eventId);
     const attendees = (ev.attendees || []).filter(function (a) { return !p.email || String(a.email).toLowerCase() !== String(p.email).toLowerCase(); });
-    Calendar.Events.patch({ attendees: attendees }, 'primary', eventId, { sendUpdates: 'all' });
+    Calendar.Events.patch({ attendees: attendees }, cal, eventId, { sendUpdates: 'all' });
   } catch (e) { console.error('Calendar attendee not removed: ' + e); }
 }
 
 function removeEvent_(eventId) {
   if (typeof Calendar === 'undefined') return;
-  try { Calendar.Events.remove('primary', eventId, { sendUpdates: 'all' }); }
+  try { Calendar.Events.remove(eventCal_(eventId), eventId, { sendUpdates: 'all' }); }
   catch (e) { console.error('Calendar event not removed: ' + e); }
 }
 
@@ -1250,11 +1296,13 @@ function digestNow() {   // periodic trigger: reminders, then the digest
   upgradeTriggers_();
   const starting = remindStarting_();
   const soon = remindSoon_();
+  var calendar = '';
+  try { calendar = migrateCalendar_(); } catch (e) { calendar = 'error ' + e; }
   const promoted = promoteTriads_();
   const freeNow = sweepFreeNow_();
   const reminders = remindPending_();
   const digest = runDigest_();
-  const result = 'promoted: ' + promoted + ' · free now pairs: ' + freeNow + ' · starting: ' + starting + ' · soon: ' + soon + ' · reminders: ' + reminders + ' · digest: ' + digest;
+  const result = 'calendar: ' + calendar + ' · promoted: ' + promoted + ' · free now pairs: ' + freeNow + ' · starting: ' + starting + ' · soon: ' + soon + ' · reminders: ' + reminders + ' · digest: ' + digest;
   const props = PropertiesService.getScriptProperties();
   props.setProperty('LAST_RUN', new Date().toISOString()); props.setProperty('LAST_RUN_RESULT', result);
   return result;

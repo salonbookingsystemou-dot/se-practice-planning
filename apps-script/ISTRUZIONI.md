@@ -172,6 +172,14 @@ Quando qualcuno attiva «Ora sono libero» e c'è già almeno un'altra persona l
 («Franco è disponibile ora per una sessione di pratica»); rispondendo all'email si scrive direttamente all'altra persona.
 Ogni coppia viene avvisata una sola volta per finestra di disponibilità. Nel Mail log il tipo è «freenow».
 
+## Calendario dedicato «SE Practice Partners»
+Gli eventi delle sessioni non stanno più nel calendario principale del proprietario dello script, ma in un calendario
+secondario «SE Practice Partners», creato da solo e nascosto. Agli invitati l'organizzatore appare come «SE Practice Partners».
+Quando il proprietario partecipa a una sessione riceve l'invito come gli altri. Le sessioni future di altri studenti già create
+nel calendario principale vengono spostate una volta sola al primo giro automatico (esito in `status` → calendarMigration).
+Le email partono ancora dall'account Gmail del proprietario, con il nome «SE Practice Partners»: per sparire del tutto
+serve un account Google dedicato che esegua lo script.
+
 ## Knowledge base
 Tab **Knowledge base**, visibile solo agli studenti che hanno fatto l'accesso: appunti, articoli, video, libri, esercizi
 condivisi dal gruppo, con ricerca e filtro per tipo. Tutti leggono e aggiungono; ognuno può eliminare solo le proprie risorse.
