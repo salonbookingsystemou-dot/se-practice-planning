@@ -546,6 +546,7 @@ const STR = {
     emailedDecline: (n) => `Invito rifiutato. Abbiamo avvisato ${n} via email.`, remindWa: 'Ricorda su WhatsApp', cancelSession: 'Annulla',
     dlgTitle: 'Proponi una sessione', yourName: 'Il tuo nome', with: 'Con', date: 'Data', time: 'Ora',
     third: 'Terzo partecipante (facoltativo, per una triade)', nobody: 'Nessuno · sessione a due',
+    sendReminder: 'Invia promemoria', busyReminder: 'Invio…', reminderSent: (n) => `Promemoria inviato via email a ${n}.`,
     observerOpt: 'Consenti la partecipazione di un osservatore', observerOptHint: 'Una volta confermata, uno studente potrà unirsi come osservatore senza bisogno di approvazione: riceverete un\'email.',
     observerOpen: 'aperta a un osservatore', observerIs: (n) => `osservatore: ${n}`, you: 'tu', joinObserver: 'Partecipa come osservatore', leaveObserver: 'Non partecipo più come osservatore',
     observerAsk: 'Partecipare a questa sessione come osservatore? Gli organizzatori riceveranno un\'email e tu l\'invito del calendario con il link Meet.',
@@ -618,7 +619,7 @@ const STR = {
       ERR_DATE: 'Scegli una data.', ERR_TIME: 'Scegli un orario.', ERR_PAST: 'Data e ora sono già passate.',
       ERR_CLASH: (a, b, t) => `${a} e ${b} hanno già una sessione alle ${t} quel giorno.`,
       ERR_ONLY_INVITED: 'Solo la persona invitata può confermare.',
-      ERR_ONLY_PAIR: 'Solo le due persone della sessione possono annullarla.', ERR_NO_OBSERVER: 'Questa sessione non è aperta a un osservatore.', ERR_OBSERVER_TAKEN: 'Un altro studente si è già unito come osservatore.', ERR_NOT_CONFIRMED: 'La sessione non è ancora confermata.', ERR_ALREADY_IN: 'Fai già parte di questa sessione.', ERR_NOT_FOUND: 'Sessione non trovata.',
+      ERR_ONLY_PAIR: 'Solo le due persone della sessione possono annullarla.', ERR_NO_OBSERVER: 'Questa sessione non è aperta a un osservatore.', ERR_REMINDED_RECENTLY: 'Hai già inviato un promemoria per questa sessione: puoi rifarlo tra qualche ora.', ERR_ONLY_PROPOSER: 'Solo chi ha proposto la sessione può inviare il promemoria.', ERR_NOT_PENDING: 'Non c\'è nessuno in attesa di conferma.', ERR_OBSERVER_TAKEN: 'Un altro studente si è già unito come osservatore.', ERR_NOT_CONFIRMED: 'La sessione non è ancora confermata.', ERR_ALREADY_IN: 'Fai già parte di questa sessione.', ERR_NOT_FOUND: 'Sessione non trovata.',
     },
     days: ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'], daysMini: ['Lu','Ma','Me','Gi','Ve','Sa','Do'],
     daysLong: ['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'],
@@ -666,6 +667,7 @@ const STR = {
     emailedDecline: (n) => `Invitation declined. We emailed ${n}.`, remindWa: 'Remind on WhatsApp', cancelSession: 'Cancel',
     dlgTitle: 'Propose a session', yourName: 'Your name', with: 'With', date: 'Date', time: 'Time',
     third: 'Third person (optional, for a triad)', nobody: 'Nobody · session for two',
+    sendReminder: 'Send reminder', busyReminder: 'Sending…', reminderSent: (n) => `Reminder emailed to ${n}.`,
     observerOpt: 'Allow an observer to join', observerOptHint: 'Once confirmed, one student can join as an observer without approval: you will get an email.',
     observerOpen: 'open to an observer', observerIs: (n) => `observer: ${n}`, you: 'you', joinObserver: 'Join as an observer', leaveObserver: 'Stop observing',
     observerAsk: 'Join this session as an observer? The organisers will get an email and you the calendar invitation with the Meet link.',
@@ -737,7 +739,7 @@ const STR = {
       ERR_DATE: 'Choose a date.', ERR_TIME: 'Choose a time.', ERR_PAST: 'That date and time have already passed.',
       ERR_CLASH: (a, b, t) => `${a} and ${b} already have a session at ${t} that day.`,
       ERR_ONLY_INVITED: 'Only the invited person can confirm.',
-      ERR_ONLY_PAIR: 'Only the two people in the session can cancel it.', ERR_NO_OBSERVER: 'This session is not open to an observer.', ERR_OBSERVER_TAKEN: 'Another student already joined as the observer.', ERR_NOT_CONFIRMED: 'The session is not confirmed yet.', ERR_ALREADY_IN: 'You are already part of this session.', ERR_NOT_FOUND: 'Session not found.',
+      ERR_ONLY_PAIR: 'Only the two people in the session can cancel it.', ERR_NO_OBSERVER: 'This session is not open to an observer.', ERR_REMINDED_RECENTLY: 'You already sent a reminder for this session: you can send another in a few hours.', ERR_ONLY_PROPOSER: 'Only who proposed the session can send a reminder.', ERR_NOT_PENDING: 'Nobody is waiting to confirm.', ERR_OBSERVER_TAKEN: 'Another student already joined as the observer.', ERR_NOT_CONFIRMED: 'The session is not confirmed yet.', ERR_ALREADY_IN: 'You are already part of this session.', ERR_NOT_FOUND: 'Session not found.',
     },
     days: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], daysMini: ['Mo','Tu','We','Th','Fr','Sa','Su'],
     daysLong: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
@@ -1140,6 +1142,7 @@ function renderSessions() {
         <span class="status ${statusClass}">${esc(statusLabel)}</span>
         ${mine ? `<div class="actions">
           ${canConfirm ? `<button class="btn btn-small" data-confirm="${esc(b.id)}">${esc(t.confirm)}</button>` : ''}
+          ${key(b.by) === me && b.status === 'proposed' && pendingNames.length && !started ? `<button class="btn btn-ghost btn-small" data-remind="${esc(b.id)}">✉ ${esc(t.sendReminder)}</button>` : ''}
           ${reminders.map(([n, wa]) => `<a class="btn btn-ghost btn-small btn-wa" href="${esc(wa)}" target="_blank" rel="noopener">${esc(inv.length > 1 ? t.waTo(first(n)) : t.remindWa)}</a>`).join('')}
           <button class="btn btn-ghost btn-small btn-danger" data-cancel="${esc(b.id)}" ${canConfirm ? `data-decline="${inv.length > 1 ? 'keep' : '1'}"` : ''}>${esc(canConfirm ? t.decline : t.cancelSession)}</button></div>` : ''}
         ${canObserve ? `<div class="actions"><button class="btn btn-small btn-observe" data-observe="${esc(b.id)}">👁 ${esc(t.joinObserver)}</button></div>` : ''}
@@ -1704,11 +1707,20 @@ $('ph-save').onclick = async () => {
 
 document.addEventListener('click', async (e) => {
   if (e.target.closest('[data-photo]')) return openPhoto();
-  const el = e.target.closest('[data-book],[data-confirm],[data-cancel],[data-observe],[data-unobserve]');
+  const el = e.target.closest('[data-book],[data-confirm],[data-cancel],[data-observe],[data-unobserve],[data-remind]');
   if (!el) return;
   if (el.dataset.book) return openBooking(el.dataset.book, !!el.dataset.now);
   const t = T();
   if (!myKey()) return openLogin(t.needLogin);
+  if (el.dataset.remind) {
+    const done = busy(el, t.busyReminder);
+    try {
+      const d = await call('sendReminder', el.dataset.remind, myKey(), state.lang); apply(d);
+      toast(t.reminderSent(joinNames(asList(d.emailed).map(first))));
+    } catch (err) { toast(errMsg(err)); }
+    finally { if (document.body.contains(el)) done(); }
+    return;
+  }
   if (el.dataset.observe || el.dataset.unobserve) {
     const joining = !!el.dataset.observe;
     if (!confirm(joining ? t.observerAsk : t.leaveObserverAsk)) return;
@@ -1864,6 +1876,10 @@ function demo(fn, ...args) {
     if (!wasOn) return { ...JSON.parse(JSON.stringify(db)), scheduled: true, meet: b.format !== 'In person' };
   }
   if (fn === 'cancelBooking') db.bookings = db.bookings.filter(b => b.id !== args[0]);
+  if (fn === 'sendReminder') {
+    const b = db.bookings.find(x => x.id === args[0]);
+    return { ...JSON.parse(JSON.stringify(db)), emailed: [b.with, b.third].filter(n => n && !(b.confirmedBy || []).includes(n)) };
+  }
   if (fn === 'joinAsObserver' || fn === 'leaveObserver') {
     const b = db.bookings.find(x => x.id === args[0]); const who = actor(args[1]);
     if (fn === 'joinAsObserver') { if (b.observer) throw new Error('ERR_OBSERVER_TAKEN'); b.observer = who; return { ...JSON.parse(JSON.stringify(db)), emailed: [b.by, b.with] }; }

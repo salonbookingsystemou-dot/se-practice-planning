@@ -45,7 +45,7 @@ const API = { getData: getData, createBooking: createBooking, confirmBooking: co
               setTimeZone: setTimeZone, setLanguage: setLanguage, leave: leave, setDigest: setDigest, status: status,
               getFeedback: getFeedback, addFeedback: addFeedback, deleteFeedback: deleteFeedback,
               getResources: getResources, addResource: addResource, deleteResource: deleteResource,
-              joinAsObserver: joinAsObserver, leaveObserver: leaveObserver };
+              joinAsObserver: joinAsObserver, leaveObserver: leaveObserver, sendReminder: sendReminder };
 
 /* Health check without personal data: is the scheduler alive, are Gmail/Calendar usable, what happened to recent sessions */
 function status() {
@@ -758,6 +758,7 @@ function withBooking_(id, change, lang, k) {
         observerOk: String(r[17]).toLowerCase() === 'yes' || r[17] === true, observer: String(r[18] || '') };
       const out = change(b, i + 1, sheet);
       if (out.unchanged) { const same = sessionsData_(k); same.emailed = []; return same; }
+      if (out.reminded) { const same = sessionsData_(k); same.emailed = out.reminded; return same; }
       const data = sessionsData_(k);
       data.emailed = notify_(out.event, b, readPeople_(), lang, out.actor, out.everyone);
       data.scheduled = out.event === 'scheduled';
@@ -1476,34 +1477,13 @@ function replyOpts_(html, replyTo) {
   return o;
 }
 
-function remindPending_() {
-  if (!CONFIG.REMIND_HOURS || !CONFIG.SEND_EMAILS) return 'off';
-  const hour = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H'));
-  if (hour < 8 || hour >= 22) return 'quiet hours';
-  const sheet = bookingsSheet_();
-  const values = sheet.getDataRange().getValues();
-  const t = Date.now();
-  var people, langs, zones;
-  const load = function () { if (!people) { people = readPeople_(); langs = readLangs_(); zones = readZones_(); } };
-  const find = function (n) { load(); return people.find(function (p) { return key_(p.name) === key_(n); }) || { name: n }; };
+/* One reminder email about a session still waiting for confirmations (to an invitee, or to the proposer) */
+function sendPendingReminder_(b, start, pending, name, isProposer, ctx) {
+  const t = Date.now(), todayRome = today_();
+  const people = ctx.people, langs = ctx.langs, zones = ctx.zones;
+  const find = function (n) { return people.find(function (p) { return key_(p.name) === key_(n); }) || { name: n }; };
   const first = function (n) { return String(n).split(/\s+/)[0]; };
-  const todayRome = today_();
-  var sent = 0;
-
-  values.slice(1).forEach(function (r, i) {
-    if (String(r[8] || 'proposed') !== 'proposed' || r[14]) return;
-    const b = { id: String(r[0]), by: String(r[2]), with: String(r[3]), date: asDate_(r[4]), time: asTime_(r[5]),
-      format: String(r[6]), note: String(r[7]), third: String(r[9] || ''),
-      confirmedBy: String(r[10] || '').split(',').map(function (x) { return x.trim(); }).filter(String) };
-    const start = startOf_(b);
-    if (!start || start.getTime() <= t || start.getTime() - t > CONFIG.REMIND_HOURS * 3600000) return;
-    const created = r[1] && typeof r[1].getTime === 'function' ? r[1].getTime() : (Date.parse(r[1]) || 0);
-    if (created && t - created < 3 * 3600000) return;   // just proposed: the proposal email is enough
-    const pending = invitees_(b).filter(function (n) { return b.confirmedBy.indexOf(n) === -1; });
-    if (!pending.length) return;
-
-    load();
-    const send = function (name, isProposer) {
+  var sent = false;
       const p = find(name);
       const lang = MAIL[langs[name]] ? langs[name] : 'it';
       const t1 = MAIL[lang], m = REMIND_MAIL[lang];
@@ -1532,12 +1512,61 @@ function remindPending_() {
       const html = mailFrame_(lead, table, url, isProposer ? m.byButton : m.invButton, t1.footer);
       const text = [lead, ''].concat(rows.map(function (x) { return x[0] + ': ' + x[1]; }), ['', action, url, '', '—', t1.footer]).join('\n');
       try {
-        if (sendLogged_('reminder', p.name, p.email, isProposer ? m.bySubject(v) : m.invSubject(v), text,
-            replyOpts_(html, isProposer ? '' : find(b.by).email), b.id)) sent++;
+        if (sent = sendLogged_('reminder', p.name, p.email, isProposer ? m.bySubject(v) : m.invSubject(v), text,
+            replyOpts_(html, isProposer ? '' : find(b.by).email), b.id)) {}
       } catch (e) { /* logged */ }
-    };
-    pending.forEach(function (n) { send(n, false); });
-    send(b.by, true);
+      return !!sent;
+}
+
+/* "Send reminder" button: the proposer reminds who has not confirmed yet (at most once every 6 hours per session) */
+function sendReminder(id, k, lang) {
+  const name = actor_(k).name;
+  return withBooking_(id, function (b) {
+    if (key_(b.by) !== key_(name)) throw new Error('ERR_ONLY_PROPOSER');
+    if (b.status !== 'proposed') throw new Error(b.status === 'cancelled' ? 'ERR_CANCELLED' : 'ERR_NOT_PENDING');
+    const start = startOf_(b);
+    if (!start || start.getTime() <= Date.now()) throw new Error('ERR_EXPIRED');
+    const pending = invitees_(b).filter(function (n) { return b.confirmedBy.indexOf(n) === -1; });
+    if (!pending.length) throw new Error('ERR_NOT_PENDING');
+    const cache = CacheService.getScriptCache(), ck = 'remind_' + b.id;
+    if (cache.get(ck)) throw new Error('ERR_REMINDED_RECENTLY');
+    const ctx = { people: readPeople_(), langs: readLangs_(), zones: readZones_() };
+    const to = pending.filter(function (n) { return sendPendingReminder_(b, start, pending, n, false, ctx); });
+    if (!to.length) throw new Error('ERR_MAIL');
+    cache.put(ck, '1', 6 * 3600);
+    return { reminded: to };
+  }, lang, k);
+}
+
+function remindPending_() {
+  if (!CONFIG.REMIND_HOURS || !CONFIG.SEND_EMAILS) return 'off';
+  const hour = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H'));
+  if (hour < 8 || hour >= 22) return 'quiet hours';
+  const sheet = bookingsSheet_();
+  const values = sheet.getDataRange().getValues();
+  const t = Date.now();
+  var people, langs, zones;
+  const load = function () { if (!people) { people = readPeople_(); langs = readLangs_(); zones = readZones_(); } };
+  const find = function (n) { load(); return people.find(function (p) { return key_(p.name) === key_(n); }) || { name: n }; };
+  const first = function (n) { return String(n).split(/\s+/)[0]; };
+  const todayRome = today_();
+  var sent = 0;
+
+  values.slice(1).forEach(function (r, i) {
+    if (String(r[8] || 'proposed') !== 'proposed' || r[14]) return;
+    const b = { id: String(r[0]), by: String(r[2]), with: String(r[3]), date: asDate_(r[4]), time: asTime_(r[5]),
+      format: String(r[6]), note: String(r[7]), third: String(r[9] || ''),
+      confirmedBy: String(r[10] || '').split(',').map(function (x) { return x.trim(); }).filter(String) };
+    const start = startOf_(b);
+    if (!start || start.getTime() <= t || start.getTime() - t > CONFIG.REMIND_HOURS * 3600000) return;
+    const created = r[1] && typeof r[1].getTime === 'function' ? r[1].getTime() : (Date.parse(r[1]) || 0);
+    if (created && t - created < 3 * 3600000) return;   // just proposed: the proposal email is enough
+    const pending = invitees_(b).filter(function (n) { return b.confirmedBy.indexOf(n) === -1; });
+    if (!pending.length) return;
+
+    const ctx = (load(), { people: people, langs: langs, zones: zones });
+    pending.forEach(function (n) { if (sendPendingReminder_(b, start, pending, n, false, ctx)) sent++; });
+    if (sendPendingReminder_(b, start, pending, b.by, true, ctx)) sent++;
     sheet.getRange(i + 2, 15).setValue(new Date());
   });
   return sent + ' emails';

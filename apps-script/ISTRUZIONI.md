@@ -180,6 +180,10 @@ nel calendario principale vengono spostate una volta sola al primo giro automati
 Le email partono ancora dall'account Gmail del proprietario, con il nome «SE Practice Partners»: per sparire del tutto
 serve un account Google dedicato che esegua lo script.
 
+## «Invia promemoria»
+Nel tab Sessioni, chi ha proposto una sessione non ancora confermata vede «✉ Invia promemoria»: manda un'email
+a chi non ha ancora confermato (stesso testo del promemoria automatico delle 24 ore). Al massimo una volta ogni 6 ore per sessione.
+
 ## Knowledge base
 Tab **Knowledge base**, visibile solo agli studenti che hanno fatto l'accesso: appunti, articoli, video, libri, esercizi
 condivisi dal gruppo, con ricerca e filtro per tipo. Tutti leggono e aggiungono; ognuno può eliminare solo le proprie risorse.
