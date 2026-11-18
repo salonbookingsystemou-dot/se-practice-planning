@@ -34,7 +34,7 @@ const CONFIG = {
   SENDER_NAME: 'SE Practice Partners',
 };
 
-const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by', 'Meet', 'Event', 'Shared', 'Reminded', 'Soon', 'Starting', 'Observer allowed', 'Observer'];
+const BOOKING_HEADERS = ['ID', 'Created', 'Proposed by', 'With', 'Date', 'Time', 'Format', 'Note', 'Status', 'Third', 'Confirmed by', 'Meet', 'Event', 'Shared', 'Reminded', 'Soon', 'Starting', 'Observer allowed', 'Observer', 'Feedback asked'];
 
 /* ---------- JSON API used by the page on GitHub Pages ----------
    GET  …/exec?fn=getData                      → data
@@ -1302,11 +1302,65 @@ function digestNow() {   // periodic trigger: reminders, then the digest
   const promoted = promoteTriads_();
   const freeNow = sweepFreeNow_();
   const reminders = remindPending_();
+  var asked = '';
+  try { asked = askFeedback_(); } catch (e) { asked = 'error ' + e; }
   const digest = runDigest_();
-  const result = 'calendar: ' + calendar + ' · promoted: ' + promoted + ' · free now pairs: ' + freeNow + ' · starting: ' + starting + ' · soon: ' + soon + ' · reminders: ' + reminders + ' · digest: ' + digest;
+  const result = 'calendar: ' + calendar + ' · promoted: ' + promoted + ' · free now pairs: ' + freeNow + ' · starting: ' + starting + ' · soon: ' + soon + ' · reminders: ' + reminders + ' · feedback asked: ' + asked + ' · digest: ' + digest;
   const props = PropertiesService.getScriptProperties();
   props.setProperty('LAST_RUN', new Date().toISOString()); props.setProperty('LAST_RUN_RESULT', result);
   return result;
+}
+
+/* After a session ends: ask who took part (and the observer) to share what worked, on the Feedback board.
+   Once per session, only for sessions ended in the last 24 hours, never at night, never to who already wrote. */
+const ASK_FEEDBACK_MAIL = {
+  it: { subject: function (v) { return 'Com\'è andata la sessione di ' + v.when + '?'; },
+        lead: function (v) { return 'La sessione di pratica con ' + v.others + ' si è appena conclusa. Cosa secondo te ha funzionato in questa sessione? Condividi questa tua osservazione con tutto il gruppo.'; },
+        action: 'Bastano poche righe sulla pratica (non su aspetti personali): le leggono tutti gli studenti e aiutano chi si sta formando.',
+        button: 'Lascia il tuo feedback' },
+  en: { subject: function (v) { return 'How did the session of ' + v.when + ' go?'; },
+        lead: function (v) { return 'Your practice session with ' + v.others + ' has just ended. What do you think worked in this session? Share your observation with the whole group.'; },
+        action: 'A few lines about the practice (not personal matters) are enough: all students read them and they help everyone in training.',
+        button: 'Leave your feedback' },
+};
+
+function askFeedback_() {
+  if (!CONFIG.SEND_EMAILS) return 'off';
+  const hour = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H'));
+  if (hour < 8 || hour >= 22) return 'quiet hours';
+  const sheet = bookingsSheet_();
+  const values = sheet.getDataRange().getValues();
+  const t = Date.now();
+  const fb = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.FEEDBACK_SHEET);
+  const wrote = {};   // session id → keys of who already wrote
+  if (fb) fb.getDataRange().getValues().slice(1).forEach(function (r) { (wrote[String(r[1])] = wrote[String(r[1])] || []).push(key_(r[2])); });
+  var people, langs, sent = 0;
+  const first = function (n) { return String(n).split(/\s+/)[0]; };
+  values.slice(1).forEach(function (r, i) {
+    if (String(r[8]) !== 'confirmed' || r[19]) return;
+    const b = { id: String(r[0]), by: String(r[2]), with: String(r[3]), third: String(r[9] || ''), date: asDate_(r[4]), time: asTime_(r[5]),
+                confirmedBy: splitNames_(r[10]), observer: String(r[18] || '') };
+    const st = startOf_(b);
+    if (!st) return;
+    const end = st.getTime() + CONFIG.SESSION_MINUTES * 60000;
+    if (end > t || t - end > 24 * 3600000) return;
+    if (!people) { people = readPeople_(); langs = readLangs_(); }
+    const everyone = present_(b).concat(b.observer ? [b.observer] : []);
+    everyone.forEach(function (name) {
+      if ((wrote[b.id] || []).indexOf(key_(name)) !== -1) return;
+      const p = people.find(function (x) { return key_(x.name) === key_(name); }) || { name: name };
+      const lang = MAIL[langs[name]] ? langs[name] : 'it', t1 = MAIL[lang], m = ASK_FEEDBACK_MAIL[lang];
+      const others = everyone.filter(function (n) { return key_(n) !== key_(name); }).map(first);
+      const v = { others: joinNames_(others, lang), when: dateLabel_(b.date, t1.locale).short + ' ' + timeLabel_(b.time, t1.locale) };
+      const url = personalUrl_(name) + '&tab=feedback';
+      const box = '<p style="margin:0 0 18px;font-size:15px;padding:10px 12px;border-radius:10px;background:#F4ECF0;color:#5E1F3D">' + esc_(m.action) + '</p>';
+      const html = mailFrame_(m.lead(v), box, url, m.button, t1.footer);
+      const text = [m.lead(v), '', m.action, '', url, '', '—', t1.footer].join('\n');
+      try { if (sendLogged_('askFeedback', p.name, p.email, m.subject(v), text, replyOpts_(html, ''), b.id)) sent++; } catch (e) { /* logged */ }
+    });
+    sheet.getRange(i + 2, 20).setValue(new Date());
+  });
+  return sent + ' emails';
 }
 
 /* Triads proposed before the "two of three" rule: if the proposer and one invitee already agree and the session is

@@ -184,6 +184,12 @@ serve un account Google dedicato che esegua lo script.
 Nel tab Sessioni, chi ha proposto una sessione non ancora confermata vede «✉ Invia promemoria»: manda un'email
 a chi non ha ancora confermato (stesso testo del promemoria automatico delle 24 ore). Al massimo una volta ogni 6 ore per sessione.
 
+## Email «Com'è andata la sessione?»
+Quando una sessione confermata finisce, chi ha partecipato (e l'osservatore) riceve un'email che invita a lasciare un feedback:
+«Cosa secondo te ha funzionato in questa sessione? Condividi questa tua osservazione con tutto il gruppo.»
+Il bottone apre direttamente il tab Feedback. Una sola volta per sessione, non di notte (22–8), non a chi ha già scritto.
+Nel Mail log il tipo è «askFeedback»; nel foglio Bookings la colonna «Feedback asked».
+
 ## Knowledge base
 Tab **Knowledge base**, visibile solo agli studenti che hanno fatto l'accesso: appunti, articoli, video, libri, esercizi
 condivisi dal gruppo, con ricerca e filtro per tipo. Tutti leggono e aggiungono; ognuno può eliminare solo le proprie risorse.
