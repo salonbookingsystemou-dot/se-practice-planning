@@ -1224,6 +1224,10 @@ function mailFrame_(lead, inner, url, button, footer) {
     '<p style="margin:0 0 18px;font-family:Comfortaa,Trebuchet MS,Helvetica,sans-serif;font-size:20px;color:#6C1D45;line-height:1.3">' + esc_(lead) + '</p>' +
     inner +
     '<a href="' + esc_(url) + '" style="display:inline-block;background:#6C1D45;color:#fff;text-decoration:none;font-weight:bold;padding:12px 22px;border-radius:12px">' + esc_(button) + '</a>' +
+    // some mail apps don't make the button clickable: the address as plain text too
+    '<p style="margin:18px 0 0;font-size:13px;color:#6E686B;line-height:1.5">' +
+    (footer === MAIL.en.footer ? 'If the button doesn\'t work, copy this address into your browser:' : 'Se il bottone non funziona, copia questo indirizzo nel browser:') +
+    '<br><a href="' + esc_(url) + '" style="color:#6C1D45;word-break:break-all">' + esc_(url) + '</a></p>' +
     '</div><p style="max-width:520px;margin:16px auto 0;font-size:12px;color:#6E686B;text-align:center">' + esc_(footer) + '</p></div>';
 }
 
