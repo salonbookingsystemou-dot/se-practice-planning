@@ -247,6 +247,12 @@
   .ph-pick { display: inline-flex; justify-content: center; align-items: center; gap: 6px; cursor: pointer; }
   .ph-note { margin: 0; padding: 12px 14px; border-radius: var(--r-md); background: var(--accent-soft); color: var(--accent); font-size: 14px; }
   /* "Free right now" */
+  .gate { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 26px 24px; margin: 8px 0 28px; max-width: 640px; }
+  .gate h2 { font: 600 22px var(--serif); color: var(--ink); margin: 4px 0 10px; }
+  .gate p { margin: 0 0 16px; }
+  .gate .gate-actions { margin-bottom: 16px; }
+  .gate .hint { margin: 0; font-size: 14px; }
+  body.locked #cta, body.locked #update, body.locked #free-now, body.locked .tabs, body.locked [role=tabpanel], body.locked #online-chip { display: none !important; }
   .free-now { background: color-mix(in srgb, var(--ochre) 9%, var(--surface)); border: 1px solid var(--ochre); border-radius: var(--r-lg); padding: 14px 16px 16px; margin-bottom: 22px; }
   .free-now-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
   .free-now h2 { display: flex; align-items: center; gap: 8px; margin: 0; font: 600 18px var(--serif); color: var(--ink); }
@@ -372,6 +378,13 @@
       <a class="btn btn-big-secondary" id="cta-edit" href="#" target="_blank" rel="noopener" data-i18n="editData"></a>
     </div>
   </aside>
+  <section class="gate" id="gate" hidden aria-labelledby="gate-title">
+    <p class="eyebrow" data-i18n="gateEyebrow"></p>
+    <h2 id="gate-title" data-i18n="gateTitle"></h2>
+    <p data-i18n="gateText"></p>
+    <div class="gate-actions"><button type="button" class="btn btn-big" id="gate-login" data-i18n="signIn"></button></div>
+    <p class="hint"><span data-i18n="gateNew"></span> <a id="gate-form" href="#" target="_blank" rel="noopener" data-i18n="ctaButton"></a></p>
+  </section>
   <p class="update" id="update" hidden><span data-i18n="updateText"></span>
     <a class="btn btn-ghost btn-small btn-edit" id="update-link" href="#" target="_blank" rel="noopener"><span aria-hidden="true">✎</span> <span data-i18n="editData"></span></a></p>
 
@@ -593,7 +606,10 @@ const STR = {
     notInList: (e) => `L\'email ${e} non è nella lista. Compila il modulo con questo account, oppure ricevi il link all\'email che hai usato nel modulo.`,
     needLogin: 'Accedi per proporre, confermare o segnarti come libero/a.', welcome: (n) => `Ciao ${n}! Ti abbiamo riconosciuto.`,
     whoEyebrow: 'Benvenuto/a', whoTitle: 'Chi sei?', whoText: 'Scegli il tuo nome: l\'app ti mostrerà con chi hai fasce in comune e lo ricorderà su questo dispositivo.',
-    whoMissing: 'Non trovi il tuo nome?', whoSkip: 'Solo guardare', whoGo: 'Continua',
+    whoMissing: 'Non trovi il tuo nome?', whoSkip: 'Chiudi',
+    gateEyebrow: 'Area riservata', gateTitle: 'L\'app è riservata agli studenti del corso',
+    gateText: 'Per tutelare la privacy di tutti, nomi, disponibilità e sessioni sono visibili solo a chi ha fatto l\'accesso. Entra con l\'account Google o con l\'email che hai usato nel modulo.',
+    gateNew: 'Non hai ancora inserito le tue disponibilità?', whoGo: 'Continua',
     phEyebrow: 'Il tuo profilo', phTitle: 'Aggiungi la tua foto',
     phText: 'Così i compagni ti riconoscono subito. Puoi scattarla ora o sceglierla dalla galleria.',
     phCamera: 'Scatta una foto', phGallery: 'Dalla galleria', phLater: 'Più tardi', phSave: 'Salva la foto',
@@ -714,7 +730,10 @@ const STR = {
     notInList: (e) => `The email ${e} is not on the list. Fill in the form with this account, or get the link at the email you used in the form.`,
     needLogin: 'Sign in to propose, confirm or mark yourself as free.', welcome: (n) => `Hi ${n}! We recognised you.`,
     whoEyebrow: 'Welcome', whoTitle: 'Who are you?', whoText: 'Choose your name: the app will show who shares your free slots and remember it on this device.',
-    whoMissing: 'Can\'t find your name?', whoSkip: 'Just browse', whoGo: 'Continue',
+    whoMissing: 'Can\'t find your name?', whoSkip: 'Close',
+    gateEyebrow: 'Members only', gateTitle: 'The app is for students of the course only',
+    gateText: 'To protect everyone\'s privacy, names, availability and sessions are visible only after signing in. Use the Google account or the email you used in the form.',
+    gateNew: 'Haven\'t entered your availability yet?', whoGo: 'Continue',
     phEyebrow: 'Your profile', phTitle: 'Add your photo',
     phText: 'So your classmates recognise you right away. Take one now or pick one from your gallery.',
     phCamera: 'Take a photo', phGallery: 'From gallery', phLater: 'Later', phSave: 'Save photo',
@@ -1152,7 +1171,12 @@ function renderSessions() {
   }).join('');
 }
 
-function render() { $('tab-kb').hidden = !myKey(); renderMe(); renderPeople(); renderSessions(); }
+function render() {
+  // privacy: without signing in, only the sign-in page
+  document.body.classList.toggle('locked', !myKey()); $('gate').hidden = !!myKey();
+  if (state.formUrl) $('gate-form').href = state.formUrl;
+  if (!myKey()) { ['people', 'sessions', 'feedback', 'kb', 'free-now'].forEach(id => { $(id).innerHTML = ''; }); renderMe(); return; }
+  $('tab-kb').hidden = !myKey(); renderMe(); renderPeople(); renderSessions(); }
 
 /* ---------- Booking dialog ---------- */
 function openBooking(withName, now) {
@@ -1268,7 +1292,7 @@ function setSession(sess, greet) {
   state.session = sess; state.me = sess ? sess.name : '';
   try { sess ? localStorage.setItem('se-session', JSON.stringify(sess)) : localStorage.removeItem('se-session'); localStorage.removeItem('se-key'); } catch (e) {}
   state.tzSent = false;
-  if (!sess) { state.people.forEach(p => { delete p.freeUntil; }); state.online = []; }
+  if (!sess) { state.people = []; state.bookings = []; state.online = []; }
   state.feedback = null; state.kb = null;
   if (!$('panel-feedback').hidden) loadFeedback(true);
   // the knowledge base exists only for signed-in students
@@ -1304,6 +1328,11 @@ function sendMyZone() {
   if ((p.tz || '') !== mine) call('setTimeZone', myKey(), MY_TZ).then(() => { p.tz = mine; renderPeople(); }).catch(() => {});
 }
 function apply(data) {
+  if (data.locked) {   // not signed in, or a key that is no longer valid
+    state.formUrl = FORM_URL || data.formUrl || state.formUrl || '';
+    if (myKey()) { try { localStorage.removeItem(CACHE_KEY); } catch (e) {} setSession(null); }
+    state.people = []; state.bookings = []; render(); return;
+  }
   if (data.people) state.people = data.people;        // action responses carry only sessions and presence
   if (data.bookings) state.bookings = data.bookings;
   if (data.today) state.today = data.today;
@@ -1610,7 +1639,7 @@ function openLogin(message) {
 function maybeAskLogin() {
   if (state.session || new URLSearchParams(location.search).has('me') || $('dlg').open || $('login-dlg').open) return;
   var skipped = false; try { skipped = sessionStorage.getItem('se-login-skip') === '1'; } catch (e) {}
-  if (!skipped && state.people.length) openLogin();
+  if (!skipped) openLogin();
 }
 $('link-form').onsubmit = async (e) => {
   e.preventDefault();
@@ -1621,6 +1650,7 @@ $('link-form').onsubmit = async (e) => {
   finally { done(); }
 };
 $('login-skip').onclick = () => { try { sessionStorage.setItem('se-login-skip', '1'); } catch (e) {} $('login-dlg').close(); };
+$('gate-login').onclick = () => openLogin();
 document.addEventListener('click', (e) => {
   if (e.target.closest('#sign-in')) openLogin();
   const chip = e.target.closest('#online-chip');
@@ -1777,7 +1807,7 @@ function renderLoading() {
 const CACHE_KEY = 'se-cache-v1';
 const CACHE_MAX_AGE = 7 * 864e5;
 function saveCache(data) {
-  if (USE_SAMPLE || !data || !data.people) return;
+  if (USE_SAMPLE || !data || !data.people || !myKey()) return;
   try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), who: myKey(), data })); } catch (e) { /* storage full or blocked */ }
 }
 function loadCache() {
@@ -1785,10 +1815,7 @@ function loadCache() {
     const c = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
     if (!c || !c.data || Date.now() - c.at > CACHE_MAX_AGE) return null;
     const data = c.data;
-    if (c.who !== myKey()) {   // saved for someone else, or before signing out: drop the members-only parts
-      data.people.forEach(p => { delete p.freeUntil; });
-      data.online = [];
-    }
+    if (!myKey() || c.who !== myKey()) return null;   // only the signed-in person's own copy
     return data;
   } catch (e) { return null; }
 }
@@ -1798,12 +1825,15 @@ function setRefreshing(on) {
 
 applyTexts();
 const cached = USE_SAMPLE ? null : loadCache();
-if (cached) { apply(cached); setRefreshing(true); } else renderLoading();
+const linkLogin = new URLSearchParams(location.search).has('me');
+if (cached) { apply(cached); setRefreshing(true); } else if (myKey() || linkLogin) renderLoading(); else render();
 const slowTimer = cached ? 0 : setTimeout(() => { const el = $('loading-text'); if (el) el.textContent = T().loadingSlow; }, 4000);
 recognise();
-call('getData', myKey()).then(data => {
+const startKey = myKey();
+call('getData', startKey).then(data => {
+  if (startKey !== myKey()) return;   // signed in meanwhile (personal link): that sign-in loads its own data
   apply(data); saveCache(data);
-  state.me ? maybeAskPhoto() : maybeAskLogin();
+  myKey() ? maybeAskPhoto() : maybeAskLogin();
 }).catch(err => {
   if (cached) { toast(T().offlineCopy); return; }   // keep showing the saved copy
   $('people').innerHTML = `<div class="error">${esc(T().loadError)} ${esc(errMsg(err))}</div>`;
@@ -1846,7 +1876,7 @@ function demo(fn, ...args) {
     return { items: demo.kb.map(r => ({ ...r, mine: r.author === me })) };
   }
   if (fn === 'getNow') return { online: args[0] ? ['Anna Rossi', 'Luca Bianchi'] : [], now: args[0] ? Object.fromEntries(db.people.filter(p => p.freeUntil).map(p => [p.name, p.freeUntil])) : {} };
-  if (fn === 'getData' && !args[0]) { const c = JSON.parse(JSON.stringify(db)); c.people.forEach(p => delete p.freeUntil); return c; }
+  if (fn === 'getData' && !db.people.some(p => p.key === args[0])) return { locked: true, today: db.today, formUrl: db.formUrl };
   if (fn === 'getData') return { ...JSON.parse(JSON.stringify(db)), online: ['Anna Rossi', 'Luca Bianchi'] };
   if (fn === 'setFreeNow') {
     const p = db.people.find(x => x.name === actor(args[0]));

@@ -104,6 +104,9 @@ function json_(obj) {
 
 /* k = personal key of whoever is looking. "Free right now" is shared only with signed-in students. */
 function getData(k) {
+  // Privacy: names, availability and sessions only for signed-in students. Others get just what the sign-in page needs.
+  const viewer = k ? personByKey_(k) : null;
+  if (!viewer) return { locked: true, today: today_(), formUrl: CONFIG.FORM_URL, appUrl: appUrl_() };
   // Email addresses never leave the server: the page only learns whether someone can be notified.
   const people = readPeople_().map(function (p) {
     const out = Object.assign({}, p);
@@ -111,8 +114,7 @@ function getData(k) {
     delete out.email;
     return out;
   });
-  const viewer = k ? personByKey_(k) : null;
-  const now = viewer ? readNow_() : {};
+  const now = readNow_();
   const zones = readZones_();
   const done = sessionsDone_();
   people.forEach(function (p) {
@@ -121,13 +123,14 @@ function getData(k) {
     if (zones[p.name] && zones[p.name] !== CONFIG.TIMEZONE) p.tz = zones[p.name];
   });
   const out = { people: people, bookings: readBookings_(), today: today_(), formUrl: CONFIG.FORM_URL, appUrl: appUrl_() };
-  if (viewer) { touch_(viewer); out.online = readOnline_(people); }   // presence: only for signed-in people
+  touch_(viewer); out.online = readOnline_(people);
   return out;
 }
 
 /* What the page needs after proposing / confirming / cancelling: sessions and presence, not everyone's photos again */
 function sessionsData_(k) {
   const viewer = k ? personByKey_(k) : null;
+  if (!viewer) return { locked: true, today: today_() };
   const out = { bookings: readBookings_(), today: today_() };
   if (viewer) { touch_(viewer); out.online = readOnline_(readPeople_()); }
   return out;

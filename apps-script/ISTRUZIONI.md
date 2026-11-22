@@ -190,6 +190,11 @@ Quando una sessione confermata finisce, chi ha partecipato (e l'osservatore) ric
 Il bottone apre direttamente il tab Feedback. Una sola volta per sessione, non di notte (22–8), non a chi ha già scritto.
 Nel Mail log il tipo è «askFeedback»; nel foglio Bookings la colonna «Feedback asked».
 
+## Privacy: app visibile solo dopo l'accesso
+Senza accesso la pagina mostra solo il riquadro «L'app è riservata agli studenti del corso», con «Accedi» e il link al modulo.
+Il motore non restituisce nomi, disponibilità, foto o sessioni a chi non ha una chiave valida (`getData` risponde `locked`).
+La copia locale per l'apertura veloce si salva solo per chi ha fatto l'accesso e si cancella all'uscita.
+
 ## Knowledge base
 Tab **Knowledge base**, visibile solo agli studenti che hanno fatto l'accesso: appunti, articoli, video, libri, esercizi
 condivisi dal gruppo, con ricerca e filtro per tipo. Tutti leggono e aggiungono; ognuno può eliminare solo le proprie risorse.
