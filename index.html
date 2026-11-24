@@ -838,8 +838,11 @@ const hasDay = (p, d) => p.days.some(x => dayIdx(x) === DAYS.indexOf(d));
 const hasSlot = (p, s) => p.slots.some(x => slotIdx(x) === SLOTS.indexOf(s));
 const isOnline = (p) => /online|both/i.test(p.format);
 const isInPerson = (p) => /person|both/i.test(p.format);
-const initials = (n) => n.split(/\s+/).filter(Boolean).slice(0,2).map(w => w[0].toUpperCase()).join('');
-const first = (n) => String(n).split(/\s+/)[0];
+// Namesakes get the city added by the engine, "Margherita (Bologna)": a label to tell them apart, not part of the name
+const baseName = (n) => String(n).replace(/\s*\([^)]*\)\s*$/, '');
+const tag = (n) => (String(n).match(/\s(\([^)]*\))\s*$/) || ['', ''])[1];
+const initials = (n) => baseName(n).split(/\s+/).filter(w => /^\p{L}/u.test(w)).slice(0,2).map(w => w[0].toUpperCase()).join('');
+const first = (n) => { const f = baseName(n).split(/\s+/)[0], x = tag(n); return x ? f + ' ' + x : f; };
 const tone = (n) => TONES[[...n].reduce((a,c) => a + c.charCodeAt(0), 0) % TONES.length];
 const meP = () => state.people.find(p => key(p.name) === key(state.me));
 /* ---------- Time zones: sessions are stored in Italian time, everyone sees their own ---------- */
@@ -1102,7 +1105,7 @@ function renderPeople() {
           const wrapped = `<span class="av-wrap">${av}${dot}</span>`;
           return isMe ? `<button type="button" class="avatar-btn" data-photo="1" aria-label="${esc(t.phTitle)}">${wrapped}</button>` : wrapped;
         })()}
-        <div class="who-text"><h3>${esc(p.name)}${isMe ? ` <span class="badge">${esc(t.you)}</span>` : ''}${isMe && !p.photo ? ` <button type="button" class="add-photo" data-photo="1">${esc(t.addPhoto)}</button>` : ''}</h3><p>${esc(p.region || '—')}</p></div>
+        <div class="who-text"><h3>${esc(tag(p.name) && p.region ? baseName(p.name) : p.name)}${isMe ? ` <span class="badge">${esc(t.you)}</span>` : ''}${isMe && !p.photo ? ` <button type="button" class="add-photo" data-photo="1">${esc(t.addPhoto)}</button>` : ''}</h3><p>${esc(p.region || '—')}</p></div>
         <div class="done ${p.done ? '' : 'zero'}" title="${esc(t.doneTitle2(p.done || 0))}" aria-label="${esc(t.doneTitle2(p.done || 0))}">
           <span class="done-n">${p.done || 0}</span><span class="done-l">${esc(t.doneLabel(p.done || 0))}</span>
         </div>
