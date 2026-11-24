@@ -411,7 +411,12 @@ function readPhotos_() {
   const out = {};
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.PHOTOS_SHEET);
   if (!sheet) return out;
-  sheet.getDataRange().getValues().slice(1).forEach(function (r) { if (r[0] && r[2]) out[String(r[0])] = String(r[2]); });
+  sheet.getDataRange().getValues().slice(1).forEach(function (r) {
+    if (!r[2]) return;
+    // by the name in column B too: when someone changes their name (e.g. adds the surname), updating that cell keeps the photo
+    if (r[1]) out[personKey_(String(r[1]).trim())] = String(r[2]);
+    if (r[0] && !out[String(r[0])]) out[String(r[0])] = String(r[2]);
+  });
   return out;
 }
 
