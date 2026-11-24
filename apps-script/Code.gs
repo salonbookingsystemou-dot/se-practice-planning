@@ -54,7 +54,7 @@ function status() {
   try { triggers = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); }); } catch (e) { triggers = ['error: ' + e.message]; }
   var quota = null; try { quota = MailApp.getRemainingDailyQuota(); } catch (e) { quota = 'error: ' + e.message; }
   const t = Date.now();
-  const sessions = bookingsSheet_().getDataRange().getValues().slice(1).map(function (r) {
+  const sessions = vals_(bookingsSheet_()).slice(1).map(function (r) {
     const b = { date: asDate_(r[4]), time: asTime_(r[5]) };
     const st = startOf_(b);
     return { id: String(r[0]), date: b.date, time: b.time, status: String(r[8] || 'proposed'), invitees: 1 + (r[9] ? 1 : 0),
@@ -63,7 +63,7 @@ function status() {
   }).filter(function (x) { return x.hoursFromNow !== null && x.hoursFromNow > -48 && x.hoursFromNow < 72; });
   return { now: new Date().toISOString(), triggers: triggers, triggerVersion: props.getProperty('TRIGGER_VERSION'),
            lastRun: props.getProperty('LAST_RUN'), lastRunResult: props.getProperty('LAST_RUN_RESULT'),
-           calendarService: typeof Calendar !== 'undefined', appCalendar: !!PropertiesService.getScriptProperties().getProperty('APP_CALENDAR_ID'),
+           calendarService: typeof Calendar !== 'undefined', idsMigration: PropertiesService.getScriptProperties().getProperty('IDS_MIGRATED') || '', appCalendar: !!PropertiesService.getScriptProperties().getProperty('APP_CALENDAR_ID'),
            calendarMigration: PropertiesService.getScriptProperties().getProperty('CAL_MIGRATED') || '', mailQuota: quota, sessions: sessions, mailLog: mailLogSummary_() };
 }
 
@@ -91,7 +91,7 @@ function run_(fn, args) {
 function mailLogSummary_() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.MAIL_LOG_SHEET);
   if (!sheet) return [];
-  return sheet.getDataRange().getValues().slice(1).slice(-40).map(function (r) {
+  return vals_(sheet).slice(1).slice(-40).map(function (r) {
     return { at: r[0] instanceof Date ? r[0].toISOString() : String(r[0]), type: String(r[1]), result: String(r[5]), session: String(r[6] || '') };
   });
 }
@@ -124,6 +124,7 @@ function getData(k) {
   });
   const out = { people: people, bookings: readBookings_(), today: today_(), formUrl: CONFIG.FORM_URL, appUrl: appUrl_() };
   touch_(viewer); out.online = readOnline_(people);
+  out.me = { name: viewer.name, key: personKey_(viewer.name) };
   return out;
 }
 
@@ -149,7 +150,7 @@ function readPeople_() {
 
 function readPeopleFromSheet_() {
   const sheet = responsesSheet_();
-  const values = sheet.getDataRange().getValues();
+  const values = vals_(sheet);
   if (values.length < 2) return [];
   const col = mapColumns_(values[0]);
   const byId = {}, order = [];
@@ -195,7 +196,8 @@ function readPeopleFromSheet_() {
       languages: list_(row, col.languages),
       phone: cell_(row, col.phone),
       notes: cell_(row, col.notes),
-      photo: uploaded[personKey_(name)] || photo_(cell_(row, col.photo)),
+      photo: (e.email && uploaded['r:' + key_(e.email)]) || uploaded['r:' + key_(name)] || uploaded['r:' + key_(e.name)]
+             || uploaded['k:' + hash_(name)] || uploaded['k:' + hash_(e.name)] || photo_(cell_(row, col.photo)),
       email: e.email,
     };
   });
@@ -227,7 +229,7 @@ function photo_(link) {
    Nothing is deleted: the sheet keeps the history. */
 function readBookings_() {
   const sheet = bookingsSheet_();
-  const values = sheet.getDataRange().getValues();
+  const values = vals_(sheet);
   const t = Date.now();
   const out = [];
   values.slice(1).forEach(function (r, i) {
@@ -264,7 +266,7 @@ function sessionsDone_() {
   if (MEMO_.done) return MEMO_.done;
   const out = {};
   const t = Date.now();
-  bookingsSheet_().getDataRange().getValues().slice(1).forEach(function (r) {
+  vals_(bookingsSheet_()).slice(1).forEach(function (r) {
     if (String(r[8]) !== 'confirmed') return;
     const st = startOf_({ date: asDate_(r[4]), time: asTime_(r[5]) });
     if (!st || st.getTime() + CONFIG.SESSION_MINUTES * 60000 > t) return;
@@ -304,14 +306,61 @@ function salt_() {
   return salt;
 }
 
-function personKey_(name) {
+function hash_(s) {
   const keys = MEMO_.keys || (MEMO_.keys = {});
-  const n = key_(name);
+  const n = key_(s);
   if (!keys[n]) {
     const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt_() + '|' + n);
     keys[n] = Utilities.base64EncodeWebSafe(bytes).replace(/[^A-Za-z0-9]/g, '').slice(0, 16);
   }
   return keys[n];
+}
+
+/* ---------- Identity: the email ----------
+   A person is their email in the form, not their name: names can change (a surname added) or be shared by two students.
+   The sheets store the email; the page and the emails always see the current name. Old name-based values still work. */
+function peopleIndex_() {
+  if (MEMO_.index) return MEMO_.index;
+  const byEmail = {}, byName = {};
+  readPeople_().forEach(function (p) { if (p.email) byEmail[key_(p.email)] = p; byName[key_(p.name)] = p; });
+  MEMO_.index = { byEmail: byEmail, byName: byName };
+  return MEMO_.index;
+}
+function findByName_(name) { return peopleIndex_().byName[key_(name)] || null; }
+/* what goes in a sheet cell for this person */
+function ref_(name) {
+  if (!name) return '';
+  const p = findByName_(name);
+  return p && p.email ? key_(p.email) : String(name);
+}
+function refs_(names) { return (names || []).map(ref_).join(', '); }
+/* the current name for what a sheet cell holds (email, or a name written before emails were used) */
+function nameOf_(v) {
+  v = String(v || '').trim();
+  if (!v || v.indexOf('@') === -1) return v;
+  const p = peopleIndex_().byEmail[key_(v)];
+  return p ? p.name : 'Ex studente';   // never show an email address to the page
+}
+const ID_COLS_ = { Bookings: [2, 3, 9, 18], Feedback: [2], Risorse: [1], Zones: [0], Now: [0] };
+const ID_LIST_COLS_ = { Bookings: [10] };
+function vals_(sheet) {
+  const values = sheet.getDataRange().getValues();
+  const name = sheet.getName();
+  const cols = ID_COLS_[name], lists = ID_LIST_COLS_[name] || [];
+  if (!cols) return values;
+  for (var i = 1; i < values.length; i++) {
+    cols.forEach(function (c) { if (c < values[i].length) values[i][c] = nameOf_(values[i][c]); });
+    lists.forEach(function (c) {
+      if (c < values[i].length) values[i][c] = String(values[i][c] || '').split(',').map(function (x) { return nameOf_(x); }).filter(String).join(', ');
+    });
+  }
+  return values;
+}
+
+/* Personal key: from the email (stable), or from the name for someone without an email */
+function personKey_(name) {
+  const p = findByName_(name);
+  return p && p.email ? hash_('e:' + key_(p.email)) : hash_(name);
 }
 
 function personalUrl_(name) { return appUrl_().replace(/\/?$/, '/') + '?me=' + personKey_(name); }
@@ -320,6 +369,8 @@ function personByKey_(k) {
   if (!k) return null;
   if (!MEMO_.byKey) {
     MEMO_.byKey = {};
+    // the old name-based keys (links already sent, devices already signed in) keep working until the name changes
+    readPeople_().forEach(function (p) { MEMO_.byKey[hash_(p.name)] = p; });
     readPeople_().forEach(function (p) { MEMO_.byKey[personKey_(p.name)] = p; });
   }
   return MEMO_.byKey[k] || null;
@@ -328,7 +379,7 @@ function personByKey_(k) {
 /* The page calls this when opened from a personal link */
 function whoAmI(k) {
   const p = personByKey_(k);
-  return p ? { name: p.name, key: k } : null;
+  return p ? { name: p.name, key: personKey_(p.name) } : null;
 }
 
 /* Every action that changes something goes through here: the name comes from the key, never from the page */
@@ -392,15 +443,16 @@ function uploadPhoto(k, dataUrl) {
   lock.waitLock(10000);
   try {
     const sheet = photosSheet_();
-    const pk = personKey_(p.name);
-    const values = sheet.getDataRange().getValues();
+    const pk = personKey_(p.name), me = ref_(p.name), old = hash_(p.name);
+    const values = vals_(sheet);
     for (var i = 1; i < values.length; i++) {
-      if (String(values[i][0]) === pk) {
-        sheet.getRange(i + 1, 2, 1, 3).setValues([[p.name, dataUrl, new Date()]]);
+      const v = values[i];
+      if (String(v[0]) === pk || String(v[0]) === old || key_(v[1]) === key_(me) || key_(v[1]) === key_(p.name)) {
+        sheet.getRange(i + 1, 1, 1, 4).setValues([[pk, me, dataUrl, new Date()]]);
         return getData(k);
       }
     }
-    sheet.appendRow([pk, p.name, dataUrl, new Date()]);
+    sheet.appendRow([pk, me, dataUrl, new Date()]);
     return getData(k);
   } finally {
     lock.releaseLock();
@@ -411,11 +463,11 @@ function readPhotos_() {
   const out = {};
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.PHOTOS_SHEET);
   if (!sheet) return out;
-  sheet.getDataRange().getValues().slice(1).forEach(function (r) {
+  // column B holds the email (or, for older rows, the name); column A the key it was saved with
+  vals_(sheet).slice(1).forEach(function (r) {
     if (!r[2]) return;
-    // by the name in column B too: when someone changes their name (e.g. adds the surname), updating that cell keeps the photo
-    if (r[1]) out[personKey_(String(r[1]).trim())] = String(r[2]);
-    if (r[0] && !out[String(r[0])]) out[String(r[0])] = String(r[2]);
+    if (r[1]) out['r:' + key_(r[1])] = String(r[2]);
+    if (r[0]) out['k:' + String(r[0])] = String(r[2]);
   });
   return out;
 }
@@ -472,11 +524,11 @@ function setFreeNow(k, minutes) {
   lock.waitLock(10000);
   try {
     const sheet = nowSheet_();
-    const values = sheet.getDataRange().getValues();
+    const values = vals_(sheet);
     var row = -1;
     for (var i = 1; i < values.length; i++) { if (key_(values[i][0]) === key_(p.name)) { row = i + 1; break; } }
     if (row > 0) sheet.getRange(row, 2).setValue(until);
-    else if (until) sheet.appendRow([p.name, until]);
+    else if (until) sheet.appendRow([ref_(p.name), until]);
     if (until) try { notifyFreeNow_(p, until); } catch (e) { console.error('Free-now email not sent: ' + e); }
     return getNow(k);
   } finally {
@@ -543,7 +595,7 @@ function readNow_() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.NOW_SHEET);
   if (!sheet) return out;
   const t = Date.now();
-  sheet.getDataRange().getValues().slice(1).forEach(function (r) {
+  vals_(sheet).slice(1).forEach(function (r) {
     const until = r[1] instanceof Date ? r[1] : (r[1] ? new Date(r[1]) : null);
     if (r[0] && until && until.getTime() > t) out[String(r[0])] = until.toISOString();
   });
@@ -573,11 +625,11 @@ function setTimeZone(k, tz) {
   lock.waitLock(10000);
   try {
     const sheet = zonesSheet_();
-    const values = sheet.getDataRange().getValues();
+    const values = vals_(sheet);
     for (var i = 1; i < values.length; i++) {
       if (key_(values[i][0]) === key_(p.name)) { sheet.getRange(i + 1, 2).setValue(tz); return { tz: tz }; }
     }
-    sheet.appendRow([p.name, tz, '']);
+    sheet.appendRow([ref_(p.name), tz, '']);
     return { tz: tz };
   } finally {
     lock.releaseLock();
@@ -592,11 +644,11 @@ function setLanguage(k, lang) {
   lock.waitLock(10000);
   try {
     const sheet = zonesSheet_();
-    const values = sheet.getDataRange().getValues();
+    const values = vals_(sheet);
     for (var i = 1; i < values.length; i++) {
       if (key_(values[i][0]) === key_(p.name)) { sheet.getRange(i + 1, 3).setValue(lang); return { lang: lang }; }
     }
-    sheet.appendRow([p.name, '', lang]);
+    sheet.appendRow([ref_(p.name), '', lang]);
     return { lang: lang };
   } finally {
     lock.releaseLock();
@@ -607,7 +659,7 @@ function readLangs_() {
   const out = {};
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.ZONES_SHEET);
   if (!sheet) return out;
-  sheet.getDataRange().getValues().slice(1).forEach(function (r) { if (r[0] && MAIL[r[2]]) out[String(r[0])] = String(r[2]); });
+  vals_(sheet).slice(1).forEach(function (r) { if (r[0] && MAIL[r[2]]) out[String(r[0])] = String(r[2]); });
   return out;
 }
 
@@ -615,7 +667,7 @@ function readZones_() {
   const out = {};
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.ZONES_SHEET);
   if (!sheet) return out;
-  sheet.getDataRange().getValues().slice(1).forEach(function (r) { if (r[0] && r[1]) out[String(r[0])] = String(r[1]); });
+  vals_(sheet).slice(1).forEach(function (r) { if (r[0] && r[1]) out[String(r[0])] = String(r[1]); });
   return out;
 }
 
@@ -671,8 +723,8 @@ function createBooking(input) {
     });
     if (clash) throw new Error(['ERR_CLASH', clash.by, clash.with, clash.time].join('|'));
 
-    bookingsSheet_().appendRow([booking.id, new Date(), booking.by, booking.with, "'" + booking.date, "'" + booking.time,
-      booking.format, booking.note, 'proposed', booking.third, '', '', '', '', '', '', '', booking.observerOk ? 'yes' : '', '']);
+    bookingsSheet_().appendRow([booking.id, new Date(), ref_(booking.by), ref_(booking.with), "'" + booking.date, "'" + booking.time,
+      booking.format, booking.note, 'proposed', ref_(booking.third), '', '', '', '', '', '', '', booking.observerOk ? 'yes' : '', '']);
     const data = sessionsData_(input.key);
     data.emailed = notify_('proposed', booking, people, input.lang, by);
     return data;
@@ -695,7 +747,7 @@ function confirmBooking(id, k, lang) {
     const wasOn = b.status === 'confirmed';
     b.confirmedBy.push(who);
     b.allConfirmed = invitees_(b).every(function (n) { return b.confirmedBy.indexOf(n) !== -1; });
-    sheet.getRange(row, 11).setValue(b.confirmedBy.join(', '));
+    sheet.getRange(row, 11).setValue(refs_(b.confirmedBy));
     // Proposer + one invitee are enough: in a triad the session is on as soon as the first invitee confirms
     sheet.getRange(row, 9).setValue('confirmed');
     b.status = 'confirmed';
@@ -720,7 +772,7 @@ function cancelBooking(id, k, lang) {
       // triad: whoever has not confirmed declines and leaves; the session goes on as a pair
       const rest = invitees_(b).filter(function (n) { return n !== who; });
       b.with = rest[0]; b.third = '';
-      sheet.getRange(row, 4).setValue(b.with);
+      sheet.getRange(row, 4).setValue(ref_(b.with));
       sheet.getRange(row, 10).setValue('');
       if (b.eventId) dropAttendee_(b.eventId, who);
       b.left = who;
@@ -745,7 +797,7 @@ function joinAsObserver(id, k, lang) {
     const start = startOf_(b);
     if (start && start.getTime() <= Date.now()) throw new Error('ERR_EXPIRED');
     b.observer = name;
-    sheet.getRange(row, 19).setValue(name);
+    sheet.getRange(row, 19).setValue(ref_(name));
     if (b.eventId) addAttendee_(b.eventId, name);
     return { event: 'observer', actor: name };
   }, lang, k);
@@ -780,7 +832,7 @@ function withBooking_(id, change, lang, k) {
   lock.waitLock(10000);
   try {
     const sheet = bookingsSheet_();
-    const values = sheet.getDataRange().getValues();
+    const values = vals_(sheet);
     for (var i = 1; i < values.length; i++) {
       const r = values[i];
       if (String(r[0]) !== String(id)) continue;
@@ -810,7 +862,7 @@ function withBooking_(id, change, lang, k) {
 function pastSessions_() {
   const t = Date.now(), from = t - CONFIG.FEEDBACK_DAYS * 86400000;
   const out = [];
-  bookingsSheet_().getDataRange().getValues().slice(1).forEach(function (r) {
+  vals_(bookingsSheet_()).slice(1).forEach(function (r) {
     if (String(r[8]) !== 'confirmed') return;
     const b = { id: String(r[0]), by: String(r[2]), with: String(r[3]), third: String(r[9] || ''), date: asDate_(r[4]), time: asTime_(r[5]),
                 format: String(r[6]), observer: String(r[18] || '') };
@@ -845,7 +897,7 @@ function getFeedback(k) {
   sessions.forEach(function (b) { byId[b.id] = b; });
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.FEEDBACK_SHEET);
   if (sheet) {
-    sheet.getDataRange().getValues().slice(1).forEach(function (r) {
+    vals_(sheet).slice(1).forEach(function (r) {
       const sid = String(r[1]);
       if (!ids[sid]) return;
       byId[sid].comments.push({ id: String(r[0]), author: String(r[2]), at: r[3] instanceof Date ? r[3].toISOString() : String(r[3]),
@@ -870,7 +922,7 @@ function addFeedback(k, sessionId, text, lang) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    feedbackSheet_().appendRow([Utilities.getUuid().slice(0, 8), b.id, me.name, new Date(), safeCell_(body)]);
+    feedbackSheet_().appendRow([Utilities.getUuid().slice(0, 8), b.id, ref_(me.name), new Date(), safeCell_(body)]);
   } finally { lock.releaseLock(); }
   notifyFeedback_(b, me, body, lang);
   return getFeedback(k);
@@ -882,7 +934,7 @@ function deleteFeedback(k, commentId) {
   lock.waitLock(10000);
   try {
     const sheet = feedbackSheet_();
-    const values = sheet.getDataRange().getValues();
+    const values = vals_(sheet);
     for (var i = 1; i < values.length; i++) {
       if (String(values[i][0]) !== String(commentId)) continue;
       if (key_(values[i][2]) !== key_(me.name)) throw new Error('ERR_NOT_YOURS');
@@ -915,7 +967,7 @@ function kbSheet_() {
 function getResources(k) {
   const me = actor_(k);
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.KB_SHEET);
-  const items = !sheet ? [] : sheet.getDataRange().getValues().slice(1).filter(function (r) { return r[0]; }).map(function (r) {
+  const items = !sheet ? [] : vals_(sheet).slice(1).filter(function (r) { return r[0]; }).map(function (r) {
     return { id: String(r[0]), author: String(r[1]), at: r[2] && typeof r[2].getTime === 'function' ? r[2].toISOString() : String(r[2]),
              cat: KB_CATS.indexOf(String(r[3])) >= 0 ? String(r[3]) : 'other', title: String(r[4]), text: String(r[5]), link: String(r[6] || ''),
              mine: key_(r[1]) === key_(me.name) };
@@ -934,7 +986,7 @@ function addResource(k, item) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    kbSheet_().appendRow([Utilities.getUuid().slice(0, 8), me.name, new Date(), cat, safeCell_(title), safeCell_(text), link]);
+    kbSheet_().appendRow([Utilities.getUuid().slice(0, 8), ref_(me.name), new Date(), cat, safeCell_(title), safeCell_(text), link]);
   } finally { lock.releaseLock(); }
   return getResources(k);
 }
@@ -945,7 +997,7 @@ function deleteResource(k, id) {
   lock.waitLock(10000);
   try {
     const sheet = kbSheet_();
-    const values = sheet.getDataRange().getValues();
+    const values = vals_(sheet);
     for (var i = 1; i < values.length; i++) {
       if (String(values[i][0]) !== String(id)) continue;
       if (key_(values[i][1]) !== key_(me.name)) throw new Error('ERR_NOT_YOURS');
@@ -1035,13 +1087,55 @@ function eventCal_(eventId) {
   try { Calendar.Events.get(cal, eventId); return cal; } catch (e) { return 'primary'; }
 }
 
+/* Once: names written in the sheets become emails (the stable identity). Names that match nobody stay as they are. */
+function migrateIds_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('IDS_MIGRATED')) return 'done before';
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  var changed = 0, unknown = {};
+  const conv = function (v) {
+    v = String(v || '').trim();
+    if (!v || v.indexOf('@') !== -1) return v;
+    const p = findByName_(v);
+    if (p && p.email) { changed++; return key_(p.email); }
+    unknown[v] = true; return v;
+  };
+  Object.keys(ID_COLS_).forEach(function (name) {
+    const sh = ss.getSheetByName(name);
+    if (!sh || sh.getLastRow() < 2) return;
+    // only the columns holding people, one at a time: every other cell stays exactly as it is
+    const lists = ID_LIST_COLS_[name] || [];
+    ID_COLS_[name].concat(lists).forEach(function (c) {
+      if (c + 1 > sh.getLastColumn()) return;
+      const range = sh.getRange(2, c + 1, sh.getLastRow() - 1, 1), values = range.getValues();
+      var dirty = false;
+      values.forEach(function (r) {
+        const before = String(r[0] || '');
+        const after = lists.indexOf(c) !== -1 ? before.split(',').map(conv).filter(String).join(', ') : conv(before);
+        if (after !== before.trim()) { r[0] = after; dirty = true; }
+      });
+      if (dirty) range.setValues(values);
+    });
+  });
+  // photos: column B becomes the email, column A the new key
+  const ph = ss.getSheetByName(CONFIG.PHOTOS_SHEET);
+  if (ph && ph.getLastRow() > 1) {
+    const r2 = ph.getRange(2, 1, ph.getLastRow() - 1, 2), v2 = r2.getValues();
+    v2.forEach(function (r) { const p = findByName_(r[1]); if (p && p.email) { r[0] = personKey_(p.name); r[1] = key_(p.email); changed++; } });
+    r2.setValues(v2);
+  }
+  const note = changed + ' cells' + (Object.keys(unknown).length ? ', unmatched: ' + Object.keys(unknown).join(' / ') : '');
+  props.setProperty('IDS_MIGRATED', new Date().toISOString() + ' ' + note);
+  return note;
+}
+
 /* Once: move future sessions still in the main calendar to the app calendar, with the owner invited only to their own */
 function migrateCalendar_() {
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('CAL_MIGRATED') || typeof Calendar === 'undefined') return 'done before';
   const cal = appCalendar_(), people = readPeople_();
   const owner = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
-  const values = bookingsSheet_().getDataRange().getValues();
+  const values = vals_(bookingsSheet_());
   var moved = 0, failed = 0;
   for (var i = 1; i < values.length; i++) {
     const r = values[i], eventId = String(r[12] || '');
@@ -1334,6 +1428,8 @@ function digestNow() {   // periodic trigger: reminders, then the digest
   upgradeTriggers_();
   const starting = remindStarting_();
   const soon = remindSoon_();
+  var ids = '';
+  try { ids = migrateIds_(); } catch (e) { ids = 'error ' + e; }
   var calendar = '';
   try { calendar = migrateCalendar_(); } catch (e) { calendar = 'error ' + e; }
   const promoted = promoteTriads_();
@@ -1342,7 +1438,7 @@ function digestNow() {   // periodic trigger: reminders, then the digest
   var asked = '';
   try { asked = askFeedback_(); } catch (e) { asked = 'error ' + e; }
   const digest = runDigest_();
-  const result = 'calendar: ' + calendar + ' · promoted: ' + promoted + ' · free now pairs: ' + freeNow + ' · starting: ' + starting + ' · soon: ' + soon + ' · reminders: ' + reminders + ' · feedback asked: ' + asked + ' · digest: ' + digest;
+  const result = 'ids: ' + ids + ' · calendar: ' + calendar + ' · promoted: ' + promoted + ' · free now pairs: ' + freeNow + ' · starting: ' + starting + ' · soon: ' + soon + ' · reminders: ' + reminders + ' · feedback asked: ' + asked + ' · digest: ' + digest;
   const props = PropertiesService.getScriptProperties();
   props.setProperty('LAST_RUN', new Date().toISOString()); props.setProperty('LAST_RUN_RESULT', result);
   return result;
@@ -1366,11 +1462,11 @@ function askFeedback_() {
   const hour = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H'));
   if (hour < 8 || hour >= 22) return 'quiet hours';
   const sheet = bookingsSheet_();
-  const values = sheet.getDataRange().getValues();
+  const values = vals_(sheet);
   const t = Date.now();
   const fb = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.FEEDBACK_SHEET);
   const wrote = {};   // session id → keys of who already wrote
-  if (fb) fb.getDataRange().getValues().slice(1).forEach(function (r) { (wrote[String(r[1])] = wrote[String(r[1])] || []).push(key_(r[2])); });
+  if (fb) vals_(fb).slice(1).forEach(function (r) { (wrote[String(r[1])] = wrote[String(r[1])] || []).push(key_(r[2])); });
   var people, langs, sent = 0;
   const first = function (n) { return String(n).split(/\s+/)[0]; };
   values.slice(1).forEach(function (r, i) {
@@ -1408,7 +1504,7 @@ function promoteTriads_() {
   var n = 0;
   try {
     const sheet = bookingsSheet_();
-    const values = sheet.getDataRange().getValues();
+    const values = vals_(sheet);
     for (var i = 1; i < values.length; i++) {
       const r = values[i];
       if (String(r[8] || 'proposed') !== 'proposed' || !r[9]) continue;
@@ -1475,7 +1571,7 @@ function runDigest_() {
   if (Date.now() - last < CONFIG.DIGEST_EVERY_HOURS * 3600000) return 'already sent today';
 
   const sheet = bookingsSheet_();
-  const values = sheet.getDataRange().getValues();
+  const values = vals_(sheet);
   const t = Date.now();
   const done = [];
   values.slice(1).forEach(function (r, i) {
@@ -1634,7 +1730,7 @@ function remindPending_() {
   const hour = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H'));
   if (hour < 8 || hour >= 22) return 'quiet hours';
   const sheet = bookingsSheet_();
-  const values = sheet.getDataRange().getValues();
+  const values = vals_(sheet);
   const t = Date.now();
   var people, langs, zones;
   const load = function () { if (!people) { people = readPeople_(); langs = readLangs_(); zones = readZones_(); } };
@@ -1686,7 +1782,7 @@ function remindSoon_() {
   const nowHour = Number(Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'H'));
   if (nowHour < 7 || nowHour >= 22) return 'quiet hours';
   const sheet = bookingsSheet_();
-  const values = sheet.getDataRange().getValues();
+  const values = vals_(sheet);
   const t = Date.now();
   var people, langs, zones;
   const load = function () { if (!people) { people = readPeople_(); langs = readLangs_(); zones = readZones_(); } };
@@ -1757,7 +1853,7 @@ const START_MAIL = {
 function remindStarting_() {
   if (!CONFIG.START_MINUTES || !CONFIG.SEND_EMAILS) return 'off';
   const sheet = bookingsSheet_();
-  const values = sheet.getDataRange().getValues();
+  const values = vals_(sheet);
   const t = Date.now();
   const due = [];
   values.slice(1).forEach(function (r, i) {
@@ -1810,11 +1906,11 @@ function setDigest(k, on) {
   lock.waitLock(10000);
   try {
     const sheet = zonesSheet_();
-    const values = sheet.getDataRange().getValues();
+    const values = vals_(sheet);
     for (var i = 1; i < values.length; i++) {
       if (key_(values[i][0]) === key_(p.name)) { sheet.getRange(i + 1, 4).setValue(v); return { reminders: !!on }; }
     }
-    sheet.appendRow([p.name, '', '', v]);
+    sheet.appendRow([ref_(p.name), '', '', v]);
     return { reminders: !!on };
   } finally {
     lock.releaseLock();
@@ -1825,7 +1921,7 @@ function readOptOut_() {
   const out = {};
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.ZONES_SHEET);
   if (!sheet) return out;
-  sheet.getDataRange().getValues().slice(1).forEach(function (r) { if (r[0] && String(r[3]) === 'off') out[String(r[0])] = true; });
+  vals_(sheet).slice(1).forEach(function (r) { if (r[0] && String(r[3]) === 'off') out[String(r[0])] = true; });
   return out;
 }
 

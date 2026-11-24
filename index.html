@@ -1336,6 +1336,11 @@ function apply(data) {
     if (myKey()) { try { localStorage.removeItem(CACHE_KEY); } catch (e) {} setSession(null); }
     state.people = []; state.bookings = []; render(); return;
   }
+  // the engine tells the current name and key (keys now come from the email): keep this device's sign-in up to date
+  if (data.me && state.session && (data.me.key !== state.session.key || data.me.name !== state.session.name)) {
+    state.session = { name: data.me.name, key: data.me.key }; state.me = data.me.name;
+    try { localStorage.setItem('se-session', JSON.stringify(state.session)); } catch (e) {}
+  }
   if (data.people) state.people = data.people;        // action responses carry only sessions and presence
   if (data.bookings) state.bookings = data.bookings;
   if (data.today) state.today = data.today;

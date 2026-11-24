@@ -195,6 +195,14 @@ Senza accesso la pagina mostra solo il riquadro «L'app è riservata agli studen
 Il motore non restituisce nomi, disponibilità, foto o sessioni a chi non ha una chiave valida (`getData` risponde `locked`).
 La copia locale per l'apertura veloce si salva solo per chi ha fatto l'accesso e si cancella all'uscita.
 
+## Identità: l'email, non il nome
+Ogni studente è identificato dall'email del modulo. Nei fogli Bookings (Proposed by, With, Third, Confirmed by, Observer),
+Feedback (Author), Risorse (Author), Zones, Now e Photos si salva l'email; l'app e le email mostrano sempre il nome attuale.
+Così uno studente può cambiare nome (es. aggiungere il cognome) senza perdere sessioni, contatore, foto e accesso,
+e due studenti con lo stesso nome restano distinti. I vecchi link personali continuano a funzionare.
+Se in una cella resta un nome (scritto prima del passaggio), viene ancora riconosciuto finché corrisponde a uno studente.
+Conversione una tantum dei fogli: esito in `status` → idsMigration (elenca anche i nomi non riconosciuti).
+
 ## Knowledge base
 Tab **Knowledge base**, visibile solo agli studenti che hanno fatto l'accesso: appunti, articoli, video, libri, esercizi
 condivisi dal gruppo, con ricerca e filtro per tipo. Tutti leggono e aggiungono; ognuno può eliminare solo le proprie risorse.
