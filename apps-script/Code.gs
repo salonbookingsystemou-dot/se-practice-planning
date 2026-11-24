@@ -152,15 +152,41 @@ function readPeopleFromSheet_() {
   const values = sheet.getDataRange().getValues();
   if (values.length < 2) return [];
   const col = mapColumns_(values[0]);
-  const byName = {};
+  const byId = {}, order = [];
 
-  const uploaded = readPhotos_();
+  // One entry per person: the email identifies them (later submissions replace earlier ones), the name only if there is no email
   values.slice(1).forEach(function (row) {
     const name = String(row[col.name] || '').trim();
     if (!name) return;
-    byName[key_(name)] = {               // later submissions replace earlier ones
+    const email = /@/.test(cell_(row, col.email)) ? cell_(row, col.email) : '';
+    var id = email ? 'e:' + email.toLowerCase() : 'n:' + key_(name);
+    if (!byId[id]) {
+      // same name and same city with a new email: the same person who changed email, not a namesake
+      const place = key_(cell_(row, col.region));
+      const same = order.filter(function (o) { return key_(byId[o].name) === key_(name) && key_(cell_(byId[o].row, col.region)) === place; })[0];
+      if (same) id = same;
+    }
+    if (!byId[id]) order.push(id);
+    byId[id] = { row: row, name: name, email: email };
+  });
+
+  // Two different people with the same name: the first to register keeps it, the others get their region added
+  // ("Margherita (Bologna)"), so names stay unique and nothing already booked changes
+  const taken = {};
+  const uploaded = readPhotos_();
+  const people = order.map(function (id) {
+    const e = byId[id], row = e.row;
+    const region = cell_(row, col.region);
+    var name = e.name;
+    if (taken[key_(name)]) {
+      const place = String(region || '').split(/[\/,(]/)[0].trim();
+      name = place ? e.name + ' (' + place + ')' : e.name;
+      for (var n = 2; taken[key_(name)]; n++) name = e.name + ' (' + n + ')';
+    }
+    taken[key_(name)] = true;
+    return {
       name: name,
-      region: cell_(row, col.region),
+      region: region,
       format: cell_(row, col.format),
       days: list_(row, col.days),
       slots: list_(row, col.slots),
@@ -170,12 +196,11 @@ function readPeopleFromSheet_() {
       phone: cell_(row, col.phone),
       notes: cell_(row, col.notes),
       photo: uploaded[personKey_(name)] || photo_(cell_(row, col.photo)),
-      email: /@/.test(cell_(row, col.email)) ? cell_(row, col.email) : '',
+      email: e.email,
     };
   });
 
-  return Object.keys(byName).map(function (k) { return byName[k]; })
-    .sort(function (a, b) { return a.name.localeCompare(b.name); });
+  return people.sort(function (a, b) { return a.name.localeCompare(b.name); });
 }
 
 /* Photo uploaded through the form: the cell holds a Drive link. The script runs as the owner,
